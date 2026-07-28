@@ -281,7 +281,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 <body>
 <header>
   <div>
-    <h1>레디핏 주문취합 도구 <span class="badge">v2.6</span></h1>
+    <h1>레디핏 주문취합 도구 <span class="badge">v2.7</span></h1>
     <div class="sub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드 (오너클랜·패션플러스·이제너두·K쇼핑·톡스토어·GS샵 등)</div>
   </div>
 </header>
@@ -535,6 +535,7 @@ function buildUnifiedRows(){
       UNIFIED.forEach(u=>{ const i=st.mapping[u]; rec[u]= i>=0? String(row[i]??"").trim() : ""; });
       rec["쇼핑몰명"]=mallName;
       rec["쇼핑몰코드"]=(MALL[s.id]&&MALL[s.id].mall)||"";
+      if(s.id==="kshop") rec["배송비금액"]="0"; // K쇼핑 배송비금액 0원
       // 오너클랜: 판매가가 배송비 포함 → 주문금액 = 합계 − 납품배송비
       if(s.id==="ownerclan"){
         const num=x=>Number(String(x==null?"":x).replace(/[^0-9.-]/g,""))||0;
@@ -568,6 +569,10 @@ function buildUnifiedRows(){
       out.push(rec);
     }
   }
+  // K쇼핑: 동일 주문번호 중복 시 -1,-2… 접미사 (이카운트 중복 업로드 방지)
+  const kCnt={}, kSeen={};
+  out.forEach(r=>{ if(r._site==="kshop" && r["주문번호"]) kCnt[r["주문번호"]]=(kCnt[r["주문번호"]]||0)+1; });
+  out.forEach(r=>{ if(r._site==="kshop" && r["주문번호"] && kCnt[r["주문번호"]]>1){ kSeen[r["주문번호"]]=(kSeen[r["주문번호"]]||0)+1; r["주문번호"]=r["주문번호"]+"-"+kSeen[r["주문번호"]]; }});
   return out;
 }
 
