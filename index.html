@@ -281,7 +281,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 <body>
 <header>
   <div>
-    <h1>레디핏 주문취합 도구 <span class="badge">v2.4</span></h1>
+    <h1>레디핏 주문취합 도구 <span class="badge">v2.5</span></h1>
     <div class="sub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드 (오너클랜·패션플러스·이제너두·K쇼핑·톡스토어·GS샵 등)</div>
   </div>
 </header>
@@ -535,6 +535,13 @@ function buildUnifiedRows(){
       UNIFIED.forEach(u=>{ const i=st.mapping[u]; rec[u]= i>=0? String(row[i]??"").trim() : ""; });
       rec["쇼핑몰명"]=mallName;
       rec["쇼핑몰코드"]=(MALL[s.id]&&MALL[s.id].mall)||"";
+      // 오너클랜: 판매가가 배송비 포함 → 주문금액 = 합계 − 납품배송비
+      if(s.id==="ownerclan"){
+        const num=x=>Number(String(x==null?"":x).replace(/[^0-9.-]/g,""))||0;
+        const hT=st.headers.findIndex(h=>norm(h)==="합계");
+        const hS=st.headers.findIndex(h=>norm(h)==="납품배송비");
+        if(hT>=0) rec["주문금액"]=String(num(row[hT])-(hS>=0?num(row[hS]):0));
+      }
       if(!rec["묶음주문번호"]) rec["묶음주문번호"]="1"; // 묶음주문번호 없으면 1 (필수값)
       // 주문일자·결제일자 → "YYYYMMDD 00:00:00" 형식 통일
       rec["주문일자"]=fmtDate(rec["주문일자"]);
