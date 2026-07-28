@@ -281,12 +281,8 @@ global.decryptXlsCFB=decryptXlsCFB;
 <body>
 <header>
   <div>
-    <h1>레디핏 주문취합 도구 <span class="badge">v1.9</span></h1>
-    <div class="sub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 · 이카운트 업로드 양식 변환 (실제 양식 검증: 오너클랜·패션플러스·이제너두·K쇼핑·톡스토어·GS샵)</div>
-  </div>
-  <div class="seg">
-    <button id="modeMerge" class="on">통합 취합본</button>
-    <button id="modeEcount">이카운트 양식</button>
+    <h1>레디핏 주문취합 도구 <span class="badge">v2.1</span></h1>
+    <div class="sub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드 (오너클랜·패션플러스·이제너두·K쇼핑·톡스토어·GS샵 등)</div>
   </div>
 </header>
 
@@ -295,11 +291,9 @@ global.decryptXlsCFB=decryptXlsCFB;
 
   <div class="toolbar">
     <button class="btn" id="downloadBtn" disabled>엑셀 다운로드</button>
-    <button class="btn" id="sendBtn" disabled style="background:var(--ok)">이카운트로 전송</button>
     <button class="btn ghost sm" id="clearBtn">전체 초기화</button>
     <button class="btn ghost sm" id="saveMap">매핑 설정 저장</button>
     <button class="btn ghost sm" id="loadMap">매핑 설정 불러오기</button>
-    <button class="btn ghost sm" id="relayCfg">전송 설정</button>
     <input type="file" id="mapFile" accept=".json" style="display:none">
     <div class="stat">
       <div>총 주문 <b id="totalRows">0</b>건</div>
@@ -626,7 +620,6 @@ function render(){
   document.getElementById("siteCount").textContent=Object.keys(store).length;
   document.getElementById("warnCount").textContent=warns.length;
   document.getElementById("downloadBtn").disabled=uni.length===0;
-  document.getElementById("sendBtn").disabled=uni.length===0;
   // 경고
   const wb=document.getElementById("warnBox");
   if(warns.length){wb.classList.add("show");
@@ -687,48 +680,6 @@ function saveMap(){
 
 /* ---------------- 이벤트 바인딩 ---------------- */
 document.getElementById("downloadBtn").addEventListener("click",download);
-
-/* ---------------- 이카운트 중계서버 전송 ---------------- */
-const relay = { url:"", mode:"test" };
-try{ const s=JSON.parse(localStorage.getItem("readyfit_relay")||"{}"); Object.assign(relay,s); }catch(_){}
-function saveRelay(){ try{ localStorage.setItem("readyfit_relay",JSON.stringify(relay)); }catch(_){} }
-function configRelay(){
-  const u=prompt("이카운트 중계서버 주소를 입력하세요.\n(예: https://xxxx.trycloudflare.com)", relay.url||"");
-  if(u===null) return false;
-  relay.url=u.trim().replace(/\/$/,"");
-  const m=confirm("전송 모드를 선택하세요.\n\n[확인] 테스트 서버(sboapi) — 먼저 검증용 (권장)\n[취소] 실서버(oapi) — 실제 등록");
-  relay.mode = m? "test":"real";
-  saveRelay();
-  alert(`전송 설정 저장됨\n서버: ${relay.url||"(미설정)"}\n모드: ${relay.mode==="test"?"테스트":"실서버"}`);
-  return true;
-}
-document.getElementById("relayCfg").addEventListener("click",configRelay);
-document.getElementById("sendBtn").addEventListener("click",async ()=>{
-  if(!relay.url){ if(!configRelay()||!relay.url) return; }
-  const rows=buildEcountRows();
-  const uni=buildUnifiedRows();
-  const warns=validate(uni);
-  let msg=`[판매입력(SaveSale) 직접등록] ${rows.length}건을 전송합니다.\n※ 이건 쇼핑몰관리 '웹자료올리기'가 아니라 판매전표 직접등록입니다.\n(웹자료올리기는 '엑셀 다운로드' 파일을 이카운트에 끌어다 놓으세요.)\n서버 모드: ${relay.mode==="test"?"테스트(sboapi)":"실서버(oapi)"}`;
-  if(warns.length) msg+=`\n\n⚠ 옵션/연락처 누락 ${warns.length}건이 있습니다. 그래도 전송할까요?`;
-  if(!confirm(msg)) return;
-  const btn=document.getElementById("sendBtn"); const orig=btn.textContent;
-  btn.disabled=true; btn.textContent="전송 중…";
-  try{
-    const res=await fetch(relay.url+"/ecount/upload",{
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({rows, mode:relay.mode})
-    });
-    const j=await res.json();
-    if(j.ok){
-      alert(`✅ 전송 완료 (${j.server})\n성공 ${j.success??"?"}건 / 실패 ${j.fail??"?"}건 / 전송 ${j.count}건`
-        + (relay.mode==="test"?"\n\n※ 테스트 서버 결과입니다. 이카운트 검증 완료 후 '전송 설정'에서 실서버로 바꾸세요.":""));
-    }else{
-      alert("❌ 전송 실패\n"+(j.error||JSON.stringify(j)));
-    }
-  }catch(err){
-    alert("❌ 서버에 연결하지 못했습니다.\n\n· 중계서버가 켜져 있는지\n· 주소가 https 인지\n· '전송 설정'의 주소가 맞는지\n확인해주세요.\n\n("+err.message+")");
-  }finally{ btn.disabled=false; btn.textContent=orig; }
-});
 document.getElementById("clearBtn").addEventListener("click",()=>{for(const k in store)delete store[k];renderDrop();render();});
 document.getElementById("saveMap").addEventListener("click",saveMap);
 document.getElementById("loadMap").addEventListener("click",()=>document.getElementById("mapFile").click());
@@ -740,8 +691,6 @@ document.getElementById("mapFile").addEventListener("change",e=>{
     renderDrop();render();alert("매핑 설정을 불러왔습니다.");
   }catch(err){alert("설정 파일을 읽지 못했습니다.");}};rd.readAsText(f);
 });
-document.getElementById("modeMerge").addEventListener("click",()=>{mode="merge";document.getElementById("modeMerge").classList.add("on");document.getElementById("modeEcount").classList.remove("on");render();});
-document.getElementById("modeEcount").addEventListener("click",()=>{mode="ecount";document.getElementById("modeEcount").classList.add("on");document.getElementById("modeMerge").classList.remove("on");render();});
 
 renderDrop();render();
 </script>
