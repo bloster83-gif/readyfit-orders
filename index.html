@@ -281,7 +281,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 <body>
 <header>
   <div>
-    <h1>레디핏 주문취합 도구 <span class="badge">v1.8</span></h1>
+    <h1>레디핏 주문취합 도구 <span class="badge">v1.9</span></h1>
     <div class="sub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 · 이카운트 업로드 양식 변환 (실제 양식 검증: 오너클랜·패션플러스·이제너두·K쇼핑·톡스토어·GS샵)</div>
   </div>
   <div class="seg">
@@ -318,7 +318,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 
   <div class="foot">
     모든 처리는 브라우저 안에서만 이루어지며, 주문 데이터가 외부로 전송되지 않습니다.<br>
-    이카운트 API 자동 업로드 · 주문 분석 리포트는 다음 단계에서 추가됩니다.
+    통합 취합본 = 이카운트 쇼핑몰관리 &quot;웹자료올리기&quot; 업로드 파일. 다운로드해서 이카운트에 끌어다 놓으세요.
   </div>
 </div>
 
@@ -326,6 +326,8 @@ global.decryptXlsCFB=decryptXlsCFB;
 /* ---------------- 설정: 사이트 & 컬럼 매핑 ---------------- */
 // 통합 취합 컬럼 (레디핏 기준 마스터시트 구조)
 const UNIFIED = ["쇼핑몰코드","묶음주문번호","주문번호","주문일자","결제일자","쇼핑몰상품코드","상품명","옵션","수량","주문금액","주문자","주문자연락처","수취인","수취인연락처1","수취인연락처2","우편번호","주소","배송요청사항","배송비구분","배송비금액","메모","쇼핑몰명"];
+// 통합 취합본 → 이카운트 '웹자료올리기' 업로드 양식 헤더 명칭
+const EXPORT_LABEL = {"쇼핑몰코드":"쇼핑몰코드","묶음주문번호":"묶음주문번호","주문번호":"주문번호","주문일자":"주문일자","결제일자":"결제일자","쇼핑몰상품코드":"쇼핑몰상품코드","상품명":"쇼핑몰상품명","옵션":"주문옵션","수량":"수량","주문금액":"주문금액","주문자":"주문자","주문자연락처":"주문자연락처","수취인":"수취인","수취인연락처1":"수취인연락처1","수취인연락처2":"수취인연락처2","우편번호":"우편번호","주소":"주소","배송요청사항":"배송요청사항","배송비구분":"배송비(선불/후불)","배송비금액":"배송비금액","메모":"메모","쇼핑몰명":"쇼핑몰명"};
 
 // 수기취합 대상 사이트 + 이카운트 거래처코드
 // (오너클랜·이제너두·이지웰·K쇼핑 코드는 이카운트 양식 파일에서 확인. 나머지는 도구에서 직접 입력/수정)
@@ -637,7 +639,7 @@ function render(){
   if(!uni.length){area.innerHTML=`<div class="empty">아직 업로드된 파일이 없습니다.</div>`;return;}
   if(mode==="merge"){
     const cols=UNIFIED;
-    area.innerHTML=table(cols, uni.slice(0,200).map(r=>cols.map(c=>({v:r[c],bad:(c==="옵션"&&!r[c])||((c==="수취인연락처1")&&!r["수취인연락처1"]&&!r["수취인연락처2"])}))), uni.length, "mall");
+    area.innerHTML=table(cols.map(c=>EXPORT_LABEL[c]), uni.slice(0,200).map(r=>cols.map(c=>({v:r[c],bad:(c==="옵션"&&!r[c])||((c==="수취인연락처1")&&!r["수취인연락처1"]&&!r["수취인연락처2"])}))), uni.length, "쇼핑몰명");
   }else{
     const ec=buildEcountRows();
     const cols=ECOUNT_COLS;
@@ -663,8 +665,10 @@ function download(){
   let ws,name;
   if(mode==="merge"){
     const uni=buildUnifiedRows();
-    const cols=UNIFIED;
-    ws=XLSX.utils.json_to_sheet(uni.map(r=>{const o={};cols.forEach(c=>o[c]=r[c]||"");return o;}),{header:cols});
+    // 웹자료올리기 양식 헤더 + 데이터 (AOA로 헤더 명칭 정확히 제어)
+    const header=UNIFIED.map(c=>EXPORT_LABEL[c]);
+    const aoa=[header, ...uni.map(r=>UNIFIED.map(c=>r[c]||""))];
+    ws=XLSX.utils.aoa_to_sheet(aoa);
     name=`${ymd}_주문취합.xlsx`;
   }else{
     const ec=buildEcountRows();
@@ -704,7 +708,7 @@ document.getElementById("sendBtn").addEventListener("click",async ()=>{
   const rows=buildEcountRows();
   const uni=buildUnifiedRows();
   const warns=validate(uni);
-  let msg=`이카운트로 ${rows.length}건을 전송합니다.\n서버 모드: ${relay.mode==="test"?"테스트(sboapi)":"실서버(oapi)"}`;
+  let msg=`[판매입력(SaveSale) 직접등록] ${rows.length}건을 전송합니다.\n※ 이건 쇼핑몰관리 '웹자료올리기'가 아니라 판매전표 직접등록입니다.\n(웹자료올리기는 '엑셀 다운로드' 파일을 이카운트에 끌어다 놓으세요.)\n서버 모드: ${relay.mode==="test"?"테스트(sboapi)":"실서버(oapi)"}`;
   if(warns.length) msg+=`\n\n⚠ 옵션/연락처 누락 ${warns.length}건이 있습니다. 그래도 전송할까요?`;
   if(!confirm(msg)) return;
   const btn=document.getElementById("sendBtn"); const orig=btn.textContent;
