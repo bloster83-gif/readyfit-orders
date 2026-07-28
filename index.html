@@ -281,7 +281,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 <body>
 <header>
   <div>
-    <h1>레디핏 주문취합 도구 <span class="badge">v1.3</span></h1>
+    <h1>레디핏 주문취합 도구 <span class="badge">v1.4</span></h1>
     <div class="sub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 · 이카운트 업로드 양식 변환 (실제 양식 검증: 오너클랜·패션플러스·이제너두·K쇼핑·톡스토어·GS샵)</div>
   </div>
   <div class="seg">
@@ -500,6 +500,7 @@ function buildUnifiedRows(){
       const rec={_site:s.id,_mallKey:s.id};
       UNIFIED.forEach(u=>{ const i=st.mapping[u]; rec[u]= i>=0? String(row[i]??"").trim() : ""; });
       rec["쇼핑몰명"]=mallName;
+      if(!rec["묶음주문번호"]) rec["묶음주문번호"]="1"; // 묶음주문번호 없으면 1 (필수값)
       // 기본주소+상세주소 분리형(K쇼핑 등)은 자동 결합
       const ai=st.mapping["주소"];
       if(ai>=0 && norm(st.headers[ai])==="기본주소"){
