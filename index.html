@@ -281,7 +281,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 <body>
 <header>
   <div>
-    <h1>레디핏 주문취합 도구 <span class="badge">v2.7</span></h1>
+    <h1>레디핏 주문취합 도구 <span class="badge">v2.8</span></h1>
     <div class="sub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드 (오너클랜·패션플러스·이제너두·K쇼핑·톡스토어·GS샵 등)</div>
   </div>
 </header>
@@ -564,7 +564,8 @@ function buildUnifiedRows(){
       // 수취인연락처: 한쪽이 비면 다른 쪽을 복사 (공란이면 이카운트 등록 오류)
       if(!rec["수취인연락처1"] && rec["수취인연락처2"]) rec["수취인연락처1"]=rec["수취인연락처2"];
       if(!rec["수취인연락처2"] && rec["수취인연락처1"]) rec["수취인연락처2"]=rec["수취인연락처1"];
-      // 주문자연락처 공란이면 수취인연락처로 채움 (패션플러스 등)
+      // 주문자 정보 공란이면 수취인 정보로 채움 (톡스토어·패션플러스 등)
+      if(!rec["주문자"]) rec["주문자"]=rec["수취인"]||"";
       if(!rec["주문자연락처"]) rec["주문자연락처"]=rec["수취인연락처1"]||rec["수취인연락처2"]||"";
       out.push(rec);
     }
