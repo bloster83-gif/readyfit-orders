@@ -281,7 +281,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 <body>
 <header>
   <div>
-    <h1>레디핏 주문취합 도구 <span class="badge">v1.4</span></h1>
+    <h1>레디핏 주문취합 도구 <span class="badge">v1.6</span></h1>
     <div class="sub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 · 이카운트 업로드 양식 변환 (실제 양식 검증: 오너클랜·패션플러스·이제너두·K쇼핑·톡스토어·GS샵)</div>
   </div>
   <div class="seg">
@@ -323,20 +323,21 @@ global.decryptXlsCFB=decryptXlsCFB;
 <script>
 /* ---------------- 설정: 사이트 & 컬럼 매핑 ---------------- */
 // 통합 취합 컬럼 (레디핏 기준 마스터시트 구조)
-const UNIFIED = ["쇼핑몰명","묶음주문번호","주문번호","주문일자","결제일자","쇼핑몰상품코드","상품명","옵션","수량","주문금액","주문자","주문자연락처","수취인","수취인연락처1","수취인연락처2","우편번호","주소","배송요청사항","배송비구분","배송비금액","메모"];
+const UNIFIED = ["쇼핑몰코드","묶음주문번호","주문번호","주문일자","결제일자","쇼핑몰상품코드","상품명","옵션","수량","주문금액","주문자","주문자연락처","수취인","수취인연락처1","수취인연락처2","우편번호","주소","배송요청사항","배송비구분","배송비금액","메모","쇼핑몰명"];
 
 // 수기취합 대상 사이트 + 이카운트 거래처코드
 // (오너클랜·이제너두·이지웰·K쇼핑 코드는 이카운트 양식 파일에서 확인. 나머지는 도구에서 직접 입력/수정)
 const MALL = {
-  ownerclan:{name:"오너클랜",       code:"1228625760"},
-  fashionplus:{name:"패션플러스",    code:""},
-  ezenerdu:{name:"이제너두",        code:"1048156237"},
-  ezwel:{name:"현대이지웰",         code:"1018190575"},
-  kshop:{name:"K쇼핑",            code:"2118179649"},
-  interpark:{name:"인터파크비즈마켓", code:""},
-  ably:{name:"에이블리",           code:""},
-  talkstore:{name:"톡스토어",       code:""},
-  gsshop:{name:"GS shop",        code:"1178113253"},
+  ownerclan:{name:"오너클랜",       code:"1228625760", mall:"00006"},
+  fashionplus:{name:"패션플러스",    code:"",           mall:"00017"},
+  halfclub:{name:"하프클럽(신)",     code:"1208106331", mall:"00018"},
+  ezenerdu:{name:"이제너두",        code:"1048156237", mall:"00013"},
+  ezwel:{name:"현대이지웰",         code:"1018190575", mall:"00008"},
+  kshop:{name:"K쇼핑",            code:"2118179649", mall:"00014"},
+  interpark:{name:"인터파크비즈마켓", code:"",           mall:"00034"},
+  ably:{name:"에이블리",           code:"",           mall:"00033"},
+  talkstore:{name:"톡스토어",       code:"",           mall:"00032"},
+  gsshop:{name:"GS shop",        code:"1178113253", mall:""},
 };
 
 // 각 사이트 원본 엑셀 → 통합 컬럼 매핑 (헤더 후보. 앞에 있을수록 우선)
@@ -390,6 +391,7 @@ const SITES = [
   {id:"ezenerdu",   label:"이제너두 (e-제너두)"},
   {id:"ezwel",      label:"현대이지웰"},
   {id:"kshop",      label:"K쇼핑"},
+  {id:"halfclub",   label:"하프클럽(신)"},
   {id:"interpark",  label:"인터파크 비즈마켓"},
   {id:"ably",       label:"에이블리"},
   {id:"talkstore",  label:"톡스토어"},
@@ -500,7 +502,12 @@ function buildUnifiedRows(){
       const rec={_site:s.id,_mallKey:s.id};
       UNIFIED.forEach(u=>{ const i=st.mapping[u]; rec[u]= i>=0? String(row[i]??"").trim() : ""; });
       rec["쇼핑몰명"]=mallName;
+      rec["쇼핑몰코드"]=(MALL[s.id]&&MALL[s.id].mall)||"";
       if(!rec["묶음주문번호"]) rec["묶음주문번호"]="1"; // 묶음주문번호 없으면 1 (필수값)
+      if(!rec["결제일자"]) rec["결제일자"]=rec["주문일자"]; // 결제일자 없으면 주문일자와 동일
+      // 배송비구분(선불/후불)은 P로 표준화 — 착불/후불만 원래 값 유지
+      const bg=rec["배송비구분"]||"";
+      rec["배송비구분"]= /착불|후불/.test(bg)? bg : "P";
       // 기본주소+상세주소 분리형(K쇼핑 등)은 자동 결합
       const ai=st.mapping["주소"];
       if(ai>=0 && norm(st.headers[ai])==="기본주소"){
@@ -626,7 +633,7 @@ function render(){
   document.getElementById("previewTitle").textContent = mode==="merge"?"미리보기 — 통합 취합본":"미리보기 — 이카운트 양식";
   if(!uni.length){area.innerHTML=`<div class="empty">아직 업로드된 파일이 없습니다.</div>`;return;}
   if(mode==="merge"){
-    const cols=["쇼핑몰명",...UNIFIED.filter(c=>c!=="쇼핑몰명")];
+    const cols=UNIFIED;
     area.innerHTML=table(cols, uni.slice(0,200).map(r=>cols.map(c=>({v:r[c],bad:(c==="옵션"&&!r[c])||((c==="수취인연락처1")&&!r["수취인연락처1"]&&!r["수취인연락처2"])}))), uni.length, "mall");
   }else{
     const ec=buildEcountRows();
@@ -653,7 +660,7 @@ function download(){
   let ws,name;
   if(mode==="merge"){
     const uni=buildUnifiedRows();
-    const cols=["쇼핑몰명",...UNIFIED.filter(c=>c!=="쇼핑몰명")];
+    const cols=UNIFIED;
     ws=XLSX.utils.json_to_sheet(uni.map(r=>{const o={};cols.forEach(c=>o[c]=r[c]||"");return o;}),{header:cols});
     name=`${ymd}_주문취합.xlsx`;
   }else{
