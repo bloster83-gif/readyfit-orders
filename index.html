@@ -281,7 +281,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 <body>
 <header>
   <div>
-    <h1>레디핏 주문취합 도구 <span class="badge">v2.1</span></h1>
+    <h1>레디핏 주문취합 도구 <span class="badge">v2.3</span></h1>
     <div class="sub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드 (오너클랜·패션플러스·이제너두·K쇼핑·톡스토어·GS샵 등)</div>
   </div>
 </header>
@@ -404,6 +404,21 @@ let codeOverride = {}; // siteId -> 거래처코드 직접입력값
 
 /* ---------------- 유틸 ---------------- */
 const norm = s => String(s==null?"":s).replace(/\s|\(|\)|\[|\]|_|-|\/|:/g,"").toLowerCase();
+// 날짜 → "YYYYMMDD 00:00:00" (다양한 입력형식·엑셀 시리얼값 대응)
+function fmtDate(v){
+  if(v==null) return "";
+  let s=String(v).trim(); if(!s) return "";
+  // 엑셀 날짜 시리얼(숫자)
+  if(/^\d{5}(\.\d+)?$/.test(s)){
+    const d=new Date(Math.round((Number(s)-25569)*86400*1000));
+    if(!isNaN(d)) return d.getUTCFullYear()+String(d.getUTCMonth()+1).padStart(2,"0")+String(d.getUTCDate()).padStart(2,"0")+" 00:00:00";
+  }
+  // 문자열에서 연·월·일 추출 (2026-07-26, 2026/07/26, 26/07/26, 20260726 등)
+  let m=s.match(/(\d{4})\D?(\d{1,2})\D?(\d{1,2})/);
+  if(!m){ const m2=s.match(/(\d{2})\D(\d{1,2})\D(\d{1,2})/); if(m2) m=["","20"+m2[1],m2[2],m2[3]]; }
+  if(m){ return m[1].padStart(4,"20")+String(m[2]).padStart(2,"0")+String(m[3]).padStart(2,"0")+" 00:00:00"; }
+  return s; // 인식 실패 시 원본 유지
+}
 function guessIndex(headers, unifiedKey){
   const cands = SYN[unifiedKey]||[];
   const H = headers.map(norm);
@@ -502,6 +517,9 @@ function buildUnifiedRows(){
       rec["쇼핑몰명"]=mallName;
       rec["쇼핑몰코드"]=(MALL[s.id]&&MALL[s.id].mall)||"";
       if(!rec["묶음주문번호"]) rec["묶음주문번호"]="1"; // 묶음주문번호 없으면 1 (필수값)
+      // 주문일자·결제일자 → "YYYYMMDD 00:00:00" 형식 통일
+      rec["주문일자"]=fmtDate(rec["주문일자"]);
+      rec["결제일자"]=fmtDate(rec["결제일자"]);
       if(!rec["결제일자"]) rec["결제일자"]=rec["주문일자"]; // 결제일자 없으면 주문일자와 동일
       // 배송비구분(선불/후불)은 P로 표준화 — 착불/후불만 원래 값 유지
       const bg=rec["배송비구분"]||"";
@@ -512,6 +530,9 @@ function buildUnifiedRows(){
         const di=st.headers.findIndex(h=>norm(h)==="상세주소");
         if(di>=0 && String(row[di]??"").trim()) rec["주소"]=(rec["주소"]+" "+String(row[di]).trim()).trim();
       }
+      // 수취인연락처: 한쪽이 비면 다른 쪽을 복사 (공란이면 이카운트 등록 오류)
+      if(!rec["수취인연락처1"] && rec["수취인연락처2"]) rec["수취인연락처1"]=rec["수취인연락처2"];
+      if(!rec["수취인연락처2"] && rec["수취인연락처1"]) rec["수취인연락처2"]=rec["수취인연락처1"];
       out.push(rec);
     }
   }
