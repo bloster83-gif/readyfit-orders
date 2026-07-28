@@ -281,7 +281,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 <body>
 <header>
   <div>
-    <h1>레디핏 주문취합 도구 <span class="badge">v2.3</span></h1>
+    <h1>레디핏 주문취합 도구 <span class="badge">v2.4</span></h1>
     <div class="sub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드 (오너클랜·패션플러스·이제너두·K쇼핑·톡스토어·GS샵 등)</div>
   </div>
 </header>
@@ -419,6 +419,25 @@ function fmtDate(v){
   if(m){ return m[1].padStart(4,"20")+String(m[2]).padStart(2,"0")+String(m[3]).padStart(2,"0")+" 00:00:00"; }
   return s; // 인식 실패 시 원본 유지
 }
+// 전화번호 → 하이픈 형식 (010-****-****, 지역번호·050X 안심번호 대응)
+function fmtPhone(v){
+  if(v==null) return "";
+  let raw=String(v).trim(); if(!raw) return "";
+  let d=raw.replace(/[^0-9]/g,"");
+  if(raw.includes("+82")) d="0"+d.replace(/^82/,"");
+  if(!d) return raw;
+  if(/^05\d/.test(d)&&d.length>=11){ const p=d.slice(0,4),r=d.slice(4);
+    if(r.length===8) return `${p}-${r.slice(0,4)}-${r.slice(4)}`;
+    if(r.length===7) return `${p}-${r.slice(0,3)}-${r.slice(3)}`; }
+  if(d.startsWith("02")){ const r=d.slice(2);
+    if(r.length===8) return `02-${r.slice(0,4)}-${r.slice(4)}`;
+    if(r.length===7) return `02-${r.slice(0,3)}-${r.slice(3)}`; }
+  if(/^0\d{2}/.test(d)){ const p=d.slice(0,3),r=d.slice(3);
+    if(r.length===8) return `${p}-${r.slice(0,4)}-${r.slice(4)}`;
+    if(r.length===7) return `${p}-${r.slice(0,3)}-${r.slice(3)}`; }
+  if(d.length===8&&/^1[5-9]/.test(d)) return `${d.slice(0,4)}-${d.slice(4)}`;
+  return raw; // 인식 실패 시 원본
+}
 function guessIndex(headers, unifiedKey){
   const cands = SYN[unifiedKey]||[];
   const H = headers.map(norm);
@@ -530,6 +549,10 @@ function buildUnifiedRows(){
         const di=st.headers.findIndex(h=>norm(h)==="상세주소");
         if(di>=0 && String(row[di]??"").trim()) rec["주소"]=(rec["주소"]+" "+String(row[di]).trim()).trim();
       }
+      // 전화번호 하이픈 형식 통일
+      rec["주문자연락처"]=fmtPhone(rec["주문자연락처"]);
+      rec["수취인연락처1"]=fmtPhone(rec["수취인연락처1"]);
+      rec["수취인연락처2"]=fmtPhone(rec["수취인연락처2"]);
       // 수취인연락처: 한쪽이 비면 다른 쪽을 복사 (공란이면 이카운트 등록 오류)
       if(!rec["수취인연락처1"] && rec["수취인연락처2"]) rec["수취인연락처1"]=rec["수취인연락처2"];
       if(!rec["수취인연락처2"] && rec["수취인연락처1"]) rec["수취인연락처2"]=rec["수취인연락처1"];
