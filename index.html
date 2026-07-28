@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>레디핏 주문취합 도구</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/* XLS(BIFF8) 비밀번호 복호화 — RC4 CryptoAPI + 표준 RC4 (msoffcrypto 알고리즘 포팅)
+ * 사용: decryptXlsCFB(u8, password, CFB) → 복호화된 파일 전체 Uint8Array
+ * 오류: throw {code:"notEncrypted"|"badPassword"|"unsupported"}
+ */
+(function(global){
+"use strict";
+/* ---------- SHA-1 (sync) ---------- */
+function sha1(bytes){
+  const ml=bytes.length; const withPad=((ml+8)>>6)+1<<6;
+  const buf=new Uint8Array(withPad); buf.set(bytes); buf[ml]=0x80;
+  const dv=new DataView(buf.buffer);
+  dv.setUint32(withPad-4, ml*8, false); dv.setUint32(withPad-8, Math.floor(ml/536870912), false);
+  let h0=0x67452301,h1=0xEFCDAB89,h2=0x98BADCFE,h3=0x10325476,h4=0xC3D2E1F0;
+  const w=new Int32Array(80);
+  for(let i=0;i<withPad;i+=64){
+    for(let j=0;j<16;j++) w[j]=dv.getInt32(i+j*4,false);
+    for(let j=16;j<80;j++){const n=w[j-3]^w[j-8]^w[j-14]^w[j-16]; w[j]=(n<<1)|(n>>>31);}
+    let a=h0,b=h1,c=h2,d=h3,e=h4;
+    for(let j=0;j<80;j++){
+      let f,k;
+      if(j<20){f=(b&c)|((~b)&d);k=0x5A827999;}
+      else if(j<40){f=b^c^d;k=0x6ED9EBA1;}
+      else if(j<60){f=(b&c)|(b&d)|(c&d);k=0x8F1BBCDC;}
+      else{f=b^c^d;k=0xCA62C1D6;}
+      const t=(((a<<5)|(a>>>27))+f+e+k+w[j])|0;
+      e=d;d=c;c=(b<<30)|(b>>>2);b=a;a=t;
+    }
+    h0=(h0+a)|0;h1=(h1+b)|0;h2=(h2+c)|0;h3=(h3+d)|0;h4=(h4+e)|0;
+  }
+  const out=new Uint8Array(20); const ov=new DataView(out.buffer);
+  ov.setInt32(0,h0,false);ov.setInt32(4,h1,false);ov.setInt32(8,h2,false);ov.setInt32(12,h3,false);ov.setInt32(16,h4,false);
+  return out;
+}
+/* ---------- MD5 (sync) ---------- */
+function md5(bytes){
+  const s=[7,12,17,22,7,12,17,22,7,12,17,22,7,12,17,22,5,9,14,20,5,9,14,20,5,9,14,20,5,9,14,20,4,11,16,23,4,11,16,23,4,11,16,23,4,11,16,23,6,10,15,21,6,10,15,21,6,10,15,21,6,10,15,21];
+  const K=new Int32Array(64); for(let i=0;i<64;i++)K[i]=(Math.abs(Math.sin(i+1))*4294967296)|0;
+  const ml=bytes.length; const withPad=((ml+8)>>6)+1<<6;
+  const buf=new Uint8Array(withPad); buf.set(bytes); buf[ml]=0x80;
+  const dv=new DataView(buf.buffer);
+  dv.setUint32(withPad-8, ml*8, true); dv.setUint32(withPad-4, Math.floor(ml/536870912), true);
+  let a0=0x67452301,b0=0xefcdab89,c0=0x98badcfe,d0=0x10325476;
+  for(let i=0;i<withPad;i+=64){
+    const M=new Int32Array(16); for(let j=0;j<16;j++)M[j]=dv.getInt32(i+j*4,true);
+    let A=a0,B=b0,C=c0,D=d0;
+    for(let j=0;j<64;j++){
+      let F,g;
+      if(j<16){F=(B&C)|((~B)&D);g=j;}
+      else if(j<32){F=(D&B)|((~D)&C);g=(5*j+1)%16;}
+      else if(j<48){F=B^C^D;g=(3*j+5)%16;}
+      else{F=C^(B|(~D));g=(7*j)%16;}
+      F=(F+A+K[j]+M[g])|0; A=D;D=C;C=B;
+      B=(B+((F<<s[j])|(F>>>(32-s[j]))))|0;
+    }
+    a0=(a0+A)|0;b0=(b0+B)|0;c0=(c0+C)|0;d0=(d0+D)|0;
+  }
+  const out=new Uint8Array(16); const ov=new DataView(out.buffer);
+  ov.setInt32(0,a0,true);ov.setInt32(4,b0,true);ov.setInt32(8,c0,true);ov.setInt32(12,d0,true);
+  return out;
+}
+/* ---------- RC4 ---------- */
+function RC4(key){
+  const S=new Uint8Array(256); for(let i=0;i<256;i++)S[i]=i;
+  let j=0;
+  for(let i=0;i<256;i++){ j=(j+S[i]+key[i%key.length])&255; const t=S[i];S[i]=S[j];S[j]=t; }
+  let i=0;j=0;
+  return { crypt(data){
+    const out=new Uint8Array(data.length);
+    for(let n=0;n<data.length;n++){
+      i=(i+1)&255; j=(j+S[i])&255; const t=S[i];S[i]=S[j];S[j]=t;
+      out[n]=data[n]^S[(S[i]+S[j])&255];
+    }
+    return out;
+  }};
+}
+/* ---------- 공통 ---------- */
+function utf16le(str){ const out=new Uint8Array(str.length*2); for(let i=0;i<str.length;i++){const c=str.charCodeAt(i);out[i*2]=c&255;out[i*2+1]=c>>8;} return out; }
+function cat(...arrs){ const len=arrs.reduce((s,a)=>s+a.length,0); const out=new Uint8Array(len); let o=0; for(const a of arrs){out.set(a,o);o+=a.length;} return out; }
+function le32(n){ return new Uint8Array([n&255,(n>>8)&255,(n>>16)&255,(n>>24)&255]); }
+function eq(a,b){ if(a.length!==b.length)return false; for(let i=0;i<a.length;i++)if(a[i]!==b[i])return false; return true; }
+
+/* CryptoAPI RC4 키 유도 */
+function capiKey(password, salt, keyBits, block){
+  const h0=sha1(cat(salt, utf16le(password)));
+  const hf=sha1(cat(h0, le32(block)));
+  if(keyBits===40) return cat(hf.slice(0,5), new Uint8Array(11));
+  return hf.slice(0, keyBits>>3);
+}
+/* 표준 RC4 키 유도 (MD5) */
+function stdKey(password, salt, block){
+  const h0=md5(utf16le(password));
+  const trunc=h0.slice(0,5);
+  const inter=new Uint8Array(21*16);
+  for(let i=0;i<16;i++){ inter.set(trunc,i*21); inter.set(salt,i*21+5); }
+  const h1=md5(inter);
+  return md5(cat(h1.slice(0,5), le32(block))).slice(0,16);
+}
+
+const REC={FilePass:47,BOF:2057,UsrExcl:404,FileLock:405,InterfaceHdr:225,RRDInfo:406,RRDHead:312,BoundSheet8:133};
+
+/* Workbook 스트림 복호화 */
+function decryptWorkbook(stream, password){
+  const dv=new DataView(stream.buffer, stream.byteOffset, stream.byteLength);
+  // FilePass 찾기 + 파싱
+  let pos=0, fp=null;
+  while(pos+4<=stream.length){
+    const num=dv.getUint16(pos,true), size=dv.getUint16(pos+2,true);
+    if(num===REC.FilePass){ fp={pos, size, data:stream.slice(pos+4,pos+4+size)}; break; }
+    pos+=4+size;
+  }
+  if(!fp) throw {code:"notEncrypted"};
+  const fd=new DataView(fp.data.buffer);
+  const wType=fd.getUint16(0,true);
+  let mode=null, salt=null, keyBits=0, encVer=null, encVerHash=null;
+  if(wType===1){
+    const vMajor=fd.getUint16(2,true), vMinor=fd.getUint16(4,true);
+    if(vMajor===1&&vMinor===1){ // 표준 RC4
+      mode="rc4";
+      salt=fp.data.slice(6,22); encVer=fp.data.slice(22,38); encVerHash=fp.data.slice(38,54);
+    }else if([2,3,4].includes(vMajor)&&vMinor===2){ // RC4 CryptoAPI
+      mode="capi";
+      let o=6; o+=4; // flags
+      const headerSize=fd.getUint32(o,true); o+=4;
+      const hv=new DataView(fp.data.buffer, o, headerSize);
+      keyBits=hv.getUint32(16,true); if(keyBits===0)keyBits=40; // header: flags,sizeExtra,algId,algIdHash,keySize@16
+      o+=headerSize;
+      o+=4; // saltSize
+      salt=fp.data.slice(o,o+16); o+=16;
+      encVer=fp.data.slice(o,o+16); o+=16;
+      o+=4; // verifierHashSize
+      encVerHash=fp.data.slice(o,o+20);
+    }else throw {code:"unsupported"};
+  }else throw {code:"unsupported"}; // XOR 미지원
+  // 비밀번호 검증
+  if(mode==="capi"){
+    const rc=RC4(capiKey(password,salt,keyBits,0));
+    const ver=rc.crypt(encVer), vh=rc.crypt(encVerHash);
+    if(!eq(sha1(ver),vh)) throw {code:"badPassword"};
+  }else{
+    const rc=RC4(stdKey(password,salt,0));
+    const ver=rc.crypt(encVer), vh=rc.crypt(encVerHash);
+    if(!eq(md5(ver),vh)) throw {code:"badPassword"};
+  }
+  // 평문/암호문 위치 마킹 후 1024바이트 블록 단위 복호화
+  const N=stream.length;
+  const encBuf=new Uint8Array(N);      // 암호화된 바이트만 복사(평문 위치는 0)
+  const plainMask=new Uint8Array(N);   // 1=평문 유지
+  const out=new Uint8Array(N);
+  pos=0;
+  while(pos+4<=N){
+    const num=dv.getUint16(pos,true), size=dv.getUint16(pos+2,true);
+    // 헤더 4바이트는 항상 평문
+    plainMask.fill(1,pos,pos+4); out.set(stream.slice(pos,pos+4),pos);
+    const dstart=pos+4, dend=Math.min(pos+4+size,N);
+    if(num===REC.FilePass){
+      // FilePass는 타입 0x0000 + 0패딩으로 무력화
+      out[pos]=0;out[pos+1]=0;
+      plainMask.fill(1,dstart,dend); // out은 이미 0
+    }else if([REC.BOF,REC.UsrExcl,REC.FileLock,REC.InterfaceHdr,REC.RRDInfo,REC.RRDHead].includes(num)){
+      plainMask.fill(1,dstart,dend); out.set(stream.slice(dstart,dend),dstart);
+    }else if(num===REC.BoundSheet8){
+      const lb=Math.min(dstart+4,dend);
+      plainMask.fill(1,dstart,lb); out.set(stream.slice(dstart,lb),dstart); // lbPlyPos 평문
+      encBuf.set(stream.slice(lb,dend),lb);
+    }else{
+      encBuf.set(stream.slice(dstart,dend),dstart);
+    }
+    pos=dend;
+  }
+  // RC4: 1024바이트마다 리키, 스트림 전체 위치 기준
+  for(let b=0;b*1024<N;b++){
+    const start=b*1024, end=Math.min(start+1024,N);
+    const key = mode==="capi"? capiKey(password,salt,keyBits,b) : stdKey(password,salt,b);
+    const dec=RC4(key).crypt(encBuf.slice(start,end));
+    for(let i=start;i<end;i++) if(!plainMask[i]) out[i]=dec[i-start];
+  }
+  return out;
+}
+
+/* CFB 파일 전체 처리: 암호화 여부 감지 + 복호화 */
+function isCfb(u8){ return u8.length>8&&u8[0]===0xD0&&u8[1]===0xCF&&u8[2]===0x11&&u8[3]===0xE0; }
+function findWorkbook(cfb){
+  for(const name of ["Workbook","Book"]){
+    const e=cfb.FullPaths.findIndex(p=>p.split("/").pop()===name);
+    if(e>=0) return cfb.FileIndex[e];
+  }
+  return null;
+}
+function xlsIsEncrypted(u8, CFB){
+  if(!isCfb(u8)) return false;
+  let cfb; try{ cfb=CFB.read(u8,{type:"buffer"}); }catch(e){ return false; }
+  const wb=findWorkbook(cfb); if(!wb||!wb.content) return false;
+  const s=wb.content instanceof Uint8Array? wb.content : new Uint8Array(wb.content);
+  const dv=new DataView(s.buffer,s.byteOffset,s.byteLength);
+  let pos=0,count=0;
+  while(pos+4<=s.length&&count<64){
+    const num=dv.getUint16(pos,true), size=dv.getUint16(pos+2,true);
+    if(num===REC.FilePass) return true;
+    pos+=4+size; count++;
+  }
+  return false;
+}
+function decryptXlsCFB(u8, password, CFB){
+  const cfb=CFB.read(u8,{type:"buffer"});
+  const wb=findWorkbook(cfb);
+  if(!wb) throw {code:"unsupported"};
+  const s=wb.content instanceof Uint8Array? wb.content : new Uint8Array(wb.content);
+  const dec=decryptWorkbook(s, password);
+  wb.content=dec; wb.size=dec.length;
+  return CFB.write(cfb,{type:"buffer"});
+}
+global.xlsIsEncrypted=xlsIsEncrypted;
+global.decryptXlsCFB=decryptXlsCFB;
+})(typeof module!=="undefined"?module.exports:window);
+
+</script>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --txt:#e6e9ef; --dim:#9aa3b2; --accent:#4f8cff; --accent2:#2f6fe0;
+    --ok:#39c07a; --warn:#f5a623; --err:#ff5c6c; --chip:#232833;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Malgun Gothic","Apple SD Gothic Neo",sans-serif;font-size:14px;line-height:1.5}
+  header{padding:20px 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:700}
+  header .sub{color:var(--dim);font-size:12.5px;margin-top:3px}
+  .wrap{max-width:1200px;margin:0 auto;padding:24px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .card h2{font-size:14px;margin:0 0 4px;font-weight:700}
+  .card .desc{color:var(--dim);font-size:12px;margin-bottom:12px}
+  .drop{border:1.5px dashed var(--line);border-radius:12px;padding:18px;text-align:center;transition:.15s;cursor:pointer;background:var(--panel2)}
+  .drop:hover,.drop.drag{border-color:var(--accent);background:#1b2130}
+  .drop .site{font-weight:700;margin-bottom:2px}
+  .drop .hint{color:var(--dim);font-size:11.5px}
+  .drop.has{border-color:var(--ok);border-style:solid}
+  .filechip{margin-top:8px;font-size:12px;color:var(--ok);display:flex;align-items:center;justify-content:center;gap:6px}
+  .filechip .x{color:var(--dim);cursor:pointer}
+  .rowcount{color:var(--dim);font-size:11.5px;margin-top:2px}
+  .btn{background:var(--accent);color:#fff;border:none;border-radius:9px;padding:10px 16px;font-size:13.5px;font-weight:700;cursor:pointer;transition:.15s}
+  .btn:hover{background:var(--accent2)}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
+  .btn.ghost:hover{border-color:var(--accent)}
+  .btn.sm{padding:6px 11px;font-size:12px}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:18px 0}
+  .stat{display:flex;gap:16px;flex-wrap:wrap;margin-left:auto;color:var(--dim);font-size:12.5px}
+  .stat b{color:var(--txt)}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  .tblwrap{overflow:auto;max-height:430px;border:1px solid var(--line);border-radius:10px;margin-top:6px}
+  th,td{padding:7px 9px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line)}
+  th{background:var(--panel2);position:sticky;top:0;font-weight:600;color:var(--dim);z-index:1}
+  tr:hover td{background:#1a1f29}
+  td.bad{color:var(--err)}
+  .badge{display:inline-block;padding:1px 7px;border-radius:20px;font-size:11px;background:var(--chip);color:var(--dim)}
+  .badge.mall{background:#20304d;color:#9cc0ff}
+  .warnbox{background:#2a2213;border:1px solid #4a3a15;color:#f5c877;border-radius:10px;padding:10px 12px;font-size:12.5px;margin-top:12px;display:none}
+  .warnbox.show{display:block}
+  .empty{color:var(--dim);text-align:center;padding:40px;font-size:13px}
+  details.map{margin-top:14px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:0 14px}
+  details.map summary{cursor:pointer;padding:12px 0;font-weight:600;font-size:13px}
+  .maprow{display:grid;grid-template-columns:120px 1fr;gap:8px;align-items:center;padding:5px 0;border-top:1px solid var(--line)}
+  .maprow select,.maprow input{background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px;width:100%}
+  .tag{font-size:11px;color:var(--dim)}
+  .foot{color:var(--dim);font-size:11.5px;margin-top:18px;text-align:center;line-height:1.7}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .seg button{background:transparent;border:none;color:var(--dim);padding:8px 14px;font-size:12.5px;cursor:pointer;font-weight:600}
+  .seg button.on{background:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>레디핏 주문취합 도구 <span class="badge">v1.3</span></h1>
+    <div class="sub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 · 이카운트 업로드 양식 변환 (실제 양식 검증: 오너클랜·패션플러스·이제너두·K쇼핑·톡스토어·GS샵)</div>
+  </div>
+  <div class="seg">
+    <button id="modeMerge" class="on">통합 취합본</button>
+    <button id="modeEcount">이카운트 양식</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="grid" id="dropGrid"></div>
+
+  <div class="toolbar">
+    <button class="btn" id="downloadBtn" disabled>엑셀 다운로드</button>
+    <button class="btn ghost sm" id="clearBtn">전체 초기화</button>
+    <button class="btn ghost sm" id="saveMap">매핑 설정 저장</button>
+    <button class="btn ghost sm" id="loadMap">매핑 설정 불러오기</button>
+    <input type="file" id="mapFile" accept=".json" style="display:none">
+    <div class="stat">
+      <div>총 주문 <b id="totalRows">0</b>건</div>
+      <div>사이트 <b id="siteCount">0</b>개</div>
+      <div>경고 <b id="warnCount">0</b>건</div>
+    </div>
+  </div>
+
+  <div class="warnbox" id="warnBox"></div>
+
+  <div class="card">
+    <h2 id="previewTitle">미리보기 — 통합 취합본</h2>
+    <div class="desc" id="previewDesc">업로드하면 취합 결과가 여기에 표시됩니다. 옵션·연락처가 비면 이카운트 등록 시 오류가 나므로 빨간색으로 표시됩니다.</div>
+    <div id="previewArea"><div class="empty">아직 업로드된 파일이 없습니다.</div></div>
+  </div>
+
+  <div class="foot">
+    모든 처리는 브라우저 안에서만 이루어지며, 주문 데이터가 외부로 전송되지 않습니다.<br>
+    이카운트 API 자동 업로드 · 주문 분석 리포트는 다음 단계에서 추가됩니다.
+  </div>
+</div>
+
+<script>
+/* ---------------- 설정: 사이트 & 컬럼 매핑 ---------------- */
+// 통합 취합 컬럼 (레디핏 기준 마스터시트 구조)
+const UNIFIED = ["쇼핑몰명","묶음주문번호","주문번호","주문일자","결제일자","쇼핑몰상품코드","상품명","옵션","수량","주문금액","주문자","주문자연락처","수취인","수취인연락처1","수취인연락처2","우편번호","주소","배송요청사항","배송비구분","배송비금액","메모"];
+
+// 수기취합 대상 사이트 + 이카운트 거래처코드
+// (오너클랜·이제너두·이지웰·K쇼핑 코드는 이카운트 양식 파일에서 확인. 나머지는 도구에서 직접 입력/수정)
+const MALL = {
+  ownerclan:{name:"오너클랜",       code:"1228625760"},
+  fashionplus:{name:"패션플러스",    code:""},
+  ezenerdu:{name:"이제너두",        code:"1048156237"},
+  ezwel:{name:"현대이지웰",         code:"1018190575"},
+  kshop:{name:"K쇼핑",            code:"2118179649"},
+  interpark:{name:"인터파크비즈마켓", code:""},
+  ably:{name:"에이블리",           code:""},
+  talkstore:{name:"톡스토어",       code:""},
+  gsshop:{name:"GS shop",        code:"1178113253"},
+};
+
+// 각 사이트 원본 엑셀 → 통합 컬럼 매핑 (헤더 후보. 앞에 있을수록 우선)
+// 사이트별 실제 다운로드 양식 확인 후 프리셋을 더 정밀하게 조정 가능.
+const SYN = {
+  "주문번호":["주문번호","상품주문번호","주문 번호","order id","묶음배송번호"],
+  "묶음주문번호":["묶음배송번호","묶음주문번호","장바구니번호","묶음번호"],
+  "주문일자":["주문일자","주문접수일자","주문일","결제일","결제일시","주문일시","주문 접수일","출고지시일","지불완료일","일자"],
+  "결제일자":["결제일자","결제일","결제일시","입금일","지불완료일"],
+  "쇼핑몰상품코드":["상품코드","판매자상품코드","셀러상품코드","업체상품코드","품목 ID","품목ID","노출상품ID","등록상품ID","상품번호"],
+  "상품명":["상품명","제품명","노출상품명","등록상품명","상품이름","product"],
+  "옵션":["옵션","옵션정보","옵션명","판매옵션","옵션내용","상품옵션","선택옵션","단품명","등록옵션명","속성","주문옵션"],
+  "수량":["수량","주문수량","구매수량","주문 수량","qty"],
+  "주문금액":["주문금액","결제금액","실결제금액","상품별 총 주문금액","판매금액","총 결제금액","상품금액","결제액","배송비제외금액","정산예정금액","판매가","공급가"],
+  "주문자":["주문자","구매자","구매자명","주문자명","주문인","보내는사람","보내는분","발송인","주문회원명","고객명","buyer"],
+  "주문자연락처":["주문자연락처","구매자연락처","구매자전화번호","주문자휴대폰","구매자 휴대전화","주문자 전화번호","보내는사람 연락처","보내는사람 핸드폰","발송인연락처"],
+  "수취인":["수취인","수취인명","수령인","수령인명","받는사람","받는분","받는이","수취인이름","인수자","receiver"],
+  "수취인연락처1":["수취인연락처1","수령인연락처1","수취인전화번호","수령인 전화번호","수취인휴대폰","받는사람 전화번호","수취인 연락처","수령인연락처","수취인 휴대폰","전화번호1","수령인휴대폰","수령인 휴대폰","수취인핸드폰","휴대전화번호","핸드폰번호","받는사람 핸드폰"],
+  "수취인연락처2":["수취인연락처2","수령인연락처2","수취인 연락처2","수령인핸드폰번호","수취인핸드폰번호","받는사람 핸드폰","수취인핸드폰","전화번호2","안심번호","전화번호"],
+  "우편번호":["우편번호","우편 번호","zip","우편번호(수취인)"],
+  "주소":["주소","배송지","수취인주소","수령인 주소","배송지주소","받는사람 주소","통합배송지"],
+  "배송요청사항":["배송요청사항","배송메세지","배송메시지","배송 메모","배송시 요구사항","요청사항","배송희망메세지","고객 요청사항"],
+  "배송비구분":["배송비구분","배송비 구분","배송여부","선불/후불","배송비유형","배송비 결제방식"],
+  "배송비금액":["배송비금액","납품 배송비","납품배송비","배송비 합계","배송료","배송비"],
+  "메모":["메모","비고","판매자 메모","기타"],
+};
+
+// 사이트별 고유 헤더 시그니처 (실제 다운로드 파일에서 추출) — 잘못된 칸 업로드 감지용
+const SIG = {
+  ownerclan:["오너클랜 판매가격","오너클랜 정산예정금액","공급사 관리코드1","공급사 메모","판매량(2주)"],
+  fashionplus:["CS알리미","실적브랜드명","주문번호-순번","배송처코드","배송출발 준수일"],
+  ezenerdu:["업체단품번호","담당MD","총공급가액","상세순번","출고지시일"],
+  kshop:["운송장ID(수정불가)","운송장SEQ(수정불가)","공급협력사코드","공급협력사명","단품코드"],
+  talkstore:["채널상품번호","하이픈포함 수령인연락처1","추천리워드수수료","노출추가수수료","유입경로"],
+  gsshop:["출하지시번호","해피콜상태","협력사상품코드","속성상품코드","상품명(송장)"],
+  // 이지웰·인터파크·에이블리는 실제 파일 확인 후 시그니처 추가 예정
+};
+function detectSite(headers){
+  const H=headers.map(norm);
+  let best=null,bs=0;
+  for(const sid in SIG){
+    const score=SIG[sid].filter(sig=>H.includes(norm(sig))).length;
+    if(score>bs){bs=score;best=sid;}
+  }
+  return bs>=2? best : null;
+}
+
+const SITES = [
+  {id:"ownerclan",  label:"오너클랜"},
+  {id:"fashionplus",label:"패션플러스"},
+  {id:"ezenerdu",   label:"이제너두 (e-제너두)"},
+  {id:"ezwel",      label:"현대이지웰"},
+  {id:"kshop",      label:"K쇼핑"},
+  {id:"interpark",  label:"인터파크 비즈마켓"},
+  {id:"ably",       label:"에이블리"},
+  {id:"talkstore",  label:"톡스토어"},
+  {id:"gsshop",     label:"GS샵 (주소/연락처 보완용)"},
+];
+
+/* ---------------- 상태 ---------------- */
+const store = {}; // siteId -> {fileName, headers, rows(원본), mapping{unified->headerIndex}}
+let mode = "merge"; // merge | ecount
+let customMap = {}; // siteId -> {unified: headerName} 사용자 저장 매핑
+let codeOverride = {}; // siteId -> 거래처코드 직접입력값
+
+/* ---------------- 유틸 ---------------- */
+const norm = s => String(s==null?"":s).replace(/\s|\(|\)|\[|\]|_|-|\/|:/g,"").toLowerCase();
+function guessIndex(headers, unifiedKey){
+  const cands = SYN[unifiedKey]||[];
+  const H = headers.map(norm);
+  for(const c of cands){ const i=H.indexOf(norm(c)); if(i>=0) return i; }
+  // 부분 포함 매칭 (헤더가 후보를 포함하는 경우만 — 역방향은 오매칭 위험)
+  for(const c of cands){ const nc=norm(c); const i=H.findIndex(h=>h&&h.includes(nc)); if(i>=0) return i; }
+  return -1;
+}
+// 헤더 행 자동 탐지: 알려진 헤더 후보가 가장 많이 매칭되는 행
+function detectHeaderRow(aoa){
+  let best=0,bestScore=-1;
+  const limit=Math.min(aoa.length,15);
+  for(let r=0;r<limit;r++){
+    const row=aoa[r]||[];
+    const H=row.map(norm);
+    let score=0;
+    for(const k in SYN){ for(const c of SYN[k]){ if(H.includes(norm(c))){score++;break;} } }
+    if(score>bestScore){bestScore=score;best=r;}
+  }
+  return best;
+}
+
+/* ---------------- 파일 처리 ---------------- */
+function handleFile(siteId, file){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      let data=new Uint8Array(e.target.result);
+      // ── 비밀번호 잠금 파일 처리 (K쇼핑 등) ──
+      if(xlsIsEncrypted(data, XLSX.CFB)){
+        let pw=prompt(`🔒 "${file.name}" 파일이 비밀번호로 잠겨 있습니다.\n\n비밀번호를 입력하세요.\n(K쇼핑: 다운로드할 때 설정한 6자리)`);
+        let done=false;
+        while(pw!=null){
+          try{ data=decryptXlsCFB(data, pw, XLSX.CFB); done=true; break; }
+          catch(err2){
+            if(err2&&err2.code==="badPassword"){
+              pw=prompt(`❌ 비밀번호가 일치하지 않습니다.\n"${file.name}" 비밀번호를 다시 입력해주세요.`);
+            }else{
+              alert("이 파일의 암호화 방식은 지원되지 않아요.\n엑셀에서 비밀번호로 연 뒤 암호 없이 다시 저장해서 올려주세요.");
+              return;
+            }
+          }
+        }
+        if(!done) return; // 입력 취소
+      }
+      const wb=XLSX.read(data,{type:"array"});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:"",raw:false});
+      if(!aoa.length){alert("빈 파일입니다.");return;}
+      const hr=detectHeaderRow(aoa);
+      const headers=(aoa[hr]||[]).map(h=>String(h).trim());
+      const rows=aoa.slice(hr+1).filter(r=>r.some(c=>String(c).trim()!==""));
+
+      // ── 잘못된 칸 업로드 감지 ──
+      const detected=detectSite(headers);
+      if(detected && detected!==siteId){
+        const dName=(SITES.find(x=>x.id===detected)||{}).label||detected;
+        const cName=(SITES.find(x=>x.id===siteId)||{}).label||siteId;
+        if(confirm(`⚠ 이 파일은 [${dName}] 주문 양식으로 보입니다.\n지금 올린 칸은 [${cName}] 입니다.\n\n[확인] → ${dName} 칸으로 자동 이동해서 올리기\n[취소] → 업로드 취소`)){
+          siteId=detected;
+        }else return;
+      }
+      // 주문 양식 인식 실패 감지 (핵심 컬럼이 거의 안 잡히는 경우)
+      const critical=["주문번호","상품명","수량","수취인","주소"];
+      const critScore=critical.filter(u=>guessIndex(headers,u)>=0).length;
+      if(!detected && critScore<3){
+        if(!confirm(`⚠ 이 파일에서 주문 컬럼(주문번호·상품명·수량·수취인·주소)을 ${critScore}개밖에 찾지 못했습니다.\n주문 엑셀이 맞는지 확인해주세요.\n\n그래도 올리시겠어요? (올린 뒤 '컬럼 매핑 확인/수정'에서 직접 지정 가능)`)) return;
+      }
+
+      const mapping={};
+      UNIFIED.forEach(u=>{
+        const saved=customMap[siteId]&&customMap[siteId][u];
+        let idx = saved!=null ? headers.indexOf(saved) : guessIndex(headers,u);
+        mapping[u]=idx;
+      });
+      store[siteId]={fileName:file.name,headers,rows,mapping};
+      renderDrop(); render();
+    }catch(err){
+      if(/encrypt|password|cfb|비밀번호/i.test(err.message)){
+        alert("이 파일은 비밀번호로 잠겨 있어요 (K쇼핑 다운로드 파일 등).\n\n엑셀에서 비밀번호로 연 뒤 [다른 이름으로 저장]에서 암호 없이 저장한 파일을 올려주세요.");
+      }else alert("파일을 읽지 못했습니다: "+err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/* ---------------- 통합 취합 ---------------- */
+function buildUnifiedRows(){
+  const out=[];
+  for(const s of SITES){
+    const st=store[s.id]; if(!st)continue;
+    const mallName = MALL[s.id]?MALL[s.id].name:s.label;
+    for(const row of st.rows){
+      const rec={_site:s.id,_mallKey:s.id};
+      UNIFIED.forEach(u=>{ const i=st.mapping[u]; rec[u]= i>=0? String(row[i]??"").trim() : ""; });
+      rec["쇼핑몰명"]=mallName;
+      // 기본주소+상세주소 분리형(K쇼핑 등)은 자동 결합
+      const ai=st.mapping["주소"];
+      if(ai>=0 && norm(st.headers[ai])==="기본주소"){
+        const di=st.headers.findIndex(h=>norm(h)==="상세주소");
+        if(di>=0 && String(row[di]??"").trim()) rec["주소"]=(rec["주소"]+" "+String(row[di]).trim()).trim();
+      }
+      out.push(rec);
+    }
+  }
+  return out;
+}
+
+/* ---------------- 이카운트 양식 변환 ---------------- */
+const ECOUNT_COLS=["일자","순번","거래처코드","거래처명","담당자코드","창고코드","거래유형","통화","환율","프로젝트코드","참조","결제조건","유효기간","납기일자","검색창내용","전화번호","핸드폰번호","팩스번호","주소","거래처참고사항","적요","견적일자","견적번호","품목코드(바코드)","상품명","규격명","BOX","수량","결제금액/수량","외화금액","공급가","부가세","적요2","클레임","합계","공급단가(포함)","배송메세지","사방넷상품코드","주문번호","참고사항","쇼핑몰상품번호","상품상태","수수료액","수수료율","주문금액/수량","기타비용"];
+function mallInfo(rec){
+  const base = MALL[rec._mallKey] || {name:rec["쇼핑몰명"]||"", code:""};
+  const code = (codeOverride[rec._mallKey]!=null && codeOverride[rec._mallKey]!=="") ? codeOverride[rec._mallKey] : base.code;
+  return {name:base.name, code};
+}
+function buildEcountRows(){
+  const uni=buildUnifiedRows();
+  return uni.map((r,i)=>{
+    const m=mallInfo(r);
+    const price=r["주문금액"]||"";
+    const o={};
+    ECOUNT_COLS.forEach(c=>o[c]="");
+    o["거래처코드"]=m.code;
+    o["거래처명"]=m.name;
+    o["담당자코드"]="109";
+    o["프로젝트코드"]="00011";
+    o["적요"]="엑셀주문";
+    o["상품명"]=r["쇼핑몰상품코드"]||r["상품명"]||"";  // 품목매핑 전 임시: 쇼핑몰상품코드
+    o["규격명"]=r["옵션"]||"";
+    o["수량"]=r["수량"]||"";
+    o["결제금액/수량"]=price;
+    o["합계"]=price;
+    o["공급단가(포함)"]=price;
+    o["배송메세지"]=r["배송요청사항"]||"";
+    o["주문번호"]=r["주문번호"]||"";
+    o["쇼핑몰상품번호"]=r["쇼핑몰상품코드"]||"";
+    o["상품상태"]="판매";
+    o["주문금액/수량"]=price;
+    return o;
+  });
+}
+
+/* ---------------- 검증 ---------------- */
+function validate(uni){
+  const warns=[];
+  uni.forEach((r,i)=>{
+    if(!r["옵션"]) warns.push({row:i,f:"옵션"});
+    if(!r["수취인연락처1"]&&!r["수취인연락처2"]) warns.push({row:i,f:"연락처"});
+  });
+  return warns;
+}
+
+/* ---------------- 렌더 ---------------- */
+function renderDrop(){
+  const g=document.getElementById("dropGrid"); g.innerHTML="";
+  SITES.forEach(s=>{
+    const st=store[s.id];
+    const el=document.createElement("div");
+    el.className="card";
+    el.innerHTML=`
+      <div class="drop ${st?'has':''}" data-site="${s.id}">
+        <div class="site">${s.label}</div>
+        <div class="hint">엑셀(.xlsx/.xls)을 끌어놓거나 클릭</div>
+        ${st?`<div class="filechip">✓ ${st.fileName}<span class="x" data-x="${s.id}">✕</span></div>
+             <div class="rowcount">${st.rows.length}건 · 헤더 ${st.headers.filter(Boolean).length}열 인식</div>`:''}
+      </div>
+      ${st?mapEditor(s):''}`;
+    g.appendChild(el);
+  });
+  // 이벤트
+  g.querySelectorAll(".drop").forEach(d=>{
+    const sid=d.dataset.site;
+    d.addEventListener("click",e=>{ if(e.target.dataset.x)return; pick(sid); });
+    d.addEventListener("dragover",e=>{e.preventDefault();d.classList.add("drag");});
+    d.addEventListener("dragleave",()=>d.classList.remove("drag"));
+    d.addEventListener("drop",e=>{e.preventDefault();d.classList.remove("drag");if(e.dataTransfer.files[0])handleFile(sid,e.dataTransfer.files[0]);});
+  });
+  g.querySelectorAll("[data-x]").forEach(x=>x.addEventListener("click",e=>{e.stopPropagation();delete store[x.dataset.x];renderDrop();render();}));
+  g.querySelectorAll("[data-code]").forEach(inp=>inp.addEventListener("input",e=>{
+    codeOverride[e.target.dataset.code]=e.target.value.trim(); render();
+  }));
+  g.querySelectorAll("[data-map]").forEach(sel=>sel.addEventListener("change",e=>{
+    const {map,unified}=e.target.dataset; const st=store[map];
+    st.mapping[unified]=parseInt(e.target.value);
+    customMap[map]=customMap[map]||{};
+    customMap[map][unified]= e.target.value>=0? st.headers[e.target.value] : null;
+    render();
+  }));
+}
+function mapEditor(s){
+  const st=store[s.id];
+  const curCode = (codeOverride[s.id]!=null?codeOverride[s.id]:(MALL[s.id]?MALL[s.id].code:""));
+  const codeRow=`<div class="maprow"><span class="tag">이카운트 거래처코드</span><input data-code="${s.id}" value="${curCode}" placeholder="예: 1228625760"></div>`;
+  const rows=UNIFIED.map(u=>{
+    const opts=[`<option value="-1">— 없음 —</option>`].concat(
+      st.headers.map((h,i)=>`<option value="${i}" ${st.mapping[u]===i?'selected':''}>${h||('열'+(i+1))}</option>`)).join("");
+    const miss = st.mapping[u]<0 && ["옵션","수취인","수취인연락처1","주소","수량"].includes(u);
+    return `<div class="maprow"><span class="tag" style="${miss?'color:var(--err)':''}">${u}</span><select data-map="${s.id}" data-unified="${u}">${opts}</select></div>`;
+  }).join("");
+  return `<details class="map"><summary>컬럼 매핑 확인/수정 (${s.label})</summary>${codeRow}${rows}</details>`;
+}
+function pick(sid){ const inp=document.createElement("input");inp.type="file";inp.accept=".xlsx,.xls";inp.onchange=e=>{if(e.target.files[0])handleFile(sid,e.target.files[0]);};inp.click(); }
+
+function render(){
+  const uni=buildUnifiedRows();
+  const warns=validate(uni);
+  document.getElementById("totalRows").textContent=uni.length;
+  document.getElementById("siteCount").textContent=Object.keys(store).length;
+  document.getElementById("warnCount").textContent=warns.length;
+  document.getElementById("downloadBtn").disabled=uni.length===0;
+  // 경고
+  const wb=document.getElementById("warnBox");
+  if(warns.length){wb.classList.add("show");
+    const opt=warns.filter(w=>w.f==="옵션").length, con=warns.filter(w=>w.f==="연락처").length;
+    wb.innerHTML=`⚠ 이카운트 등록 오류 가능: 옵션 누락 <b>${opt}</b>건, 연락처 누락 <b>${con}</b>건. 아래 표에서 빨간 칸을 확인하세요.`;
+  }else wb.classList.remove("show");
+  // 표
+  const area=document.getElementById("previewArea");
+  document.getElementById("previewTitle").textContent = mode==="merge"?"미리보기 — 통합 취합본":"미리보기 — 이카운트 양식";
+  if(!uni.length){area.innerHTML=`<div class="empty">아직 업로드된 파일이 없습니다.</div>`;return;}
+  if(mode==="merge"){
+    const cols=["쇼핑몰명",...UNIFIED.filter(c=>c!=="쇼핑몰명")];
+    area.innerHTML=table(cols, uni.slice(0,200).map(r=>cols.map(c=>({v:r[c],bad:(c==="옵션"&&!r[c])||((c==="수취인연락처1")&&!r["수취인연락처1"]&&!r["수취인연락처2"])}))), uni.length, "mall");
+  }else{
+    const ec=buildEcountRows();
+    const cols=ECOUNT_COLS;
+    area.innerHTML=table(cols, ec.slice(0,200).map(r=>cols.map(c=>({v:r[c],bad:false}))), ec.length);
+  }
+}
+function table(cols, rows, total, mallCol){
+  let h=`<div class="tblwrap"><table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join("")}</tr></thead><tbody>`;
+  h+=rows.map(cells=>`<tr>${cells.map((c,ci)=>{
+    let v=c.v==null?"":c.v;
+    if(mallCol&&cols[ci]==="쇼핑몰명"&&v)v=`<span class="badge mall">${v}</span>`;
+    return `<td class="${c.bad?'bad':''}">${v||(c.bad?'⚠ 비어있음':'')}</td>`;
+  }).join("")}</tr>`).join("");
+  h+=`</tbody></table></div>`;
+  if(total>rows.length)h+=`<div class="rowcount">전체 ${total}건 중 상위 ${rows.length}건 표시 (다운로드에는 전체 포함)</div>`;
+  return h;
+}
+
+/* ---------------- 다운로드 ---------------- */
+function download(){
+  const now=new Date();
+  const ymd=now.getFullYear()+String(now.getMonth()+1).padStart(2,"0")+String(now.getDate()).padStart(2,"0");
+  let ws,name;
+  if(mode==="merge"){
+    const uni=buildUnifiedRows();
+    const cols=["쇼핑몰명",...UNIFIED.filter(c=>c!=="쇼핑몰명")];
+    ws=XLSX.utils.json_to_sheet(uni.map(r=>{const o={};cols.forEach(c=>o[c]=r[c]||"");return o;}),{header:cols});
+    name=`${ymd}_주문취합.xlsx`;
+  }else{
+    const ec=buildEcountRows();
+    ws=XLSX.utils.json_to_sheet(ec,{header:ECOUNT_COLS});
+    name=`${ymd}_이카운트_주문등록.xlsx`;
+  }
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"주문");
+  XLSX.writeFile(wb,name);
+}
+
+/* ---------------- 매핑 설정 저장/불러오기 ---------------- */
+function saveMap(){
+  const blob=new Blob([JSON.stringify(customMap,null,2)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="주문취합_매핑설정.json";a.click();
+}
+
+/* ---------------- 이벤트 바인딩 ---------------- */
+document.getElementById("downloadBtn").addEventListener("click",download);
+document.getElementById("clearBtn").addEventListener("click",()=>{for(const k in store)delete store[k];renderDrop();render();});
+document.getElementById("saveMap").addEventListener("click",saveMap);
+document.getElementById("loadMap").addEventListener("click",()=>document.getElementById("mapFile").click());
+document.getElementById("mapFile").addEventListener("change",e=>{
+  const f=e.target.files[0];if(!f)return;const rd=new FileReader();
+  rd.onload=ev=>{try{customMap=JSON.parse(ev.target.result);
+    // 이미 올린 파일에 재적용
+    for(const sid in store){const st=store[sid];UNIFIED.forEach(u=>{const s=customMap[sid]&&customMap[sid][u];if(s!=null)st.mapping[u]=st.headers.indexOf(s);});}
+    renderDrop();render();alert("매핑 설정을 불러왔습니다.");
+  }catch(err){alert("설정 파일을 읽지 못했습니다.");}};rd.readAsText(f);
+});
+document.getElementById("modeMerge").addEventListener("click",()=>{mode="merge";document.getElementById("modeMerge").classList.add("on");document.getElementById("modeEcount").classList.remove("on");render();});
+document.getElementById("modeEcount").addEventListener("click",()=>{mode="ecount";document.getElementById("modeEcount").classList.add("on");document.getElementById("modeMerge").classList.remove("on");render();});
+
+renderDrop();render();
+</script>
+</body>
+</html>
