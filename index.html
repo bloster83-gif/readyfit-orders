@@ -353,7 +353,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v4.4</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v4.5</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -433,8 +433,10 @@ global.decryptXlsCFB=decryptXlsCFB;
   <div style="background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;width:420px;max-height:85vh;overflow:auto">
     <h2 style="margin:0 0 12px;font-size:15px">주문 수정</h2>
     <div id="editFields"></div>
-    <div style="display:flex;gap:8px;margin-top:16px">
+    <div id="editPickState" style="margin-top:12px;font-size:12.5px;color:var(--dim)"></div>
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
       <button class="btn" id="editSave" style="flex:1">저장</button>
+      <button class="btn" id="editUnpick" style="background:var(--warn);color:#1a1408;display:none">픽업검수 취소</button>
       <button class="btn" id="editDelete" style="background:var(--err)">이 주문 삭제</button>
       <button class="btn ghost sm" id="editCancel">취소</button>
     </div>
@@ -1344,6 +1346,10 @@ function openEdit(i){
   editIdx=i; const r=pkData.rows[i];
   document.getElementById("editFields").innerHTML=EDIT_FIELDS.map(([k,label])=>`
     <div class="maprow"><span class="tag">${label}</span><input data-ef="${k}" value="${String(r[k]??"").replace(/"/g,"&quot;")}"></div>`).join("");
+  document.getElementById("editPickState").innerHTML = r.picked
+    ? `현재 상태: <b style="color:var(--ok)">픽업검수 완료</b> (${r.pickedAt||""})`
+    : `현재 상태: <b style="color:var(--warn)">픽업검수 대기</b>`;
+  document.getElementById("editUnpick").style.display = r.picked ? "" : "none";
   document.getElementById("editModal").style.display="flex";
 }
 function closeEdit(){ document.getElementById("editModal").style.display="none"; editIdx=-1; }
@@ -1353,6 +1359,12 @@ document.getElementById("editSave").addEventListener("click",()=>{
   if(editIdx<0) return; const r=pkData.rows[editIdx];
   document.querySelectorAll("#editFields [data-ef]").forEach(inp=>{ r[inp.dataset.ef]=inp.value; });
   savePk(); closeEdit(); renderPick(); pickStat();
+});
+document.getElementById("editUnpick").addEventListener("click",()=>{
+  if(editIdx<0) return; const r=pkData.rows[editIdx];
+  if(!confirm(`픽업검수를 취소할까요?\n${r.수취인||""} · ${r.송장||""}`)) return;
+  r.picked=false; r.pickedAt="";
+  savePk(); closeEdit(); renderPick(); pickStat(); renderScanUI();
 });
 document.getElementById("editDelete").addEventListener("click",()=>{
   if(editIdx<0) return; const r=pkData.rows[editIdx];
