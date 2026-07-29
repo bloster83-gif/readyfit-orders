@@ -278,10 +278,15 @@ global.decryptXlsCFB=decryptXlsCFB;
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
   .seg button{background:transparent;border:none;color:var(--dim);padding:8px 14px;font-size:12.5px;cursor:pointer;font-weight:600}
   .seg button.on{background:var(--accent);color:#fff}
-  .scanbar{display:flex;gap:16px;align-items:center;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:26px;margin-top:16px}
+  .scanbar{display:flex;gap:16px;align-items:center;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 18px;flex:none}
   .scanwrap{flex:1;min-width:280px}
-  .scanwrap label{display:block;font-size:15px;color:var(--dim);margin-bottom:8px;font-weight:700}
-  #scanInput{width:100%;background:var(--bg);color:var(--txt);border:3px solid var(--accent);border-radius:14px;padding:24px 20px;font-size:28px;font-weight:800;letter-spacing:1px}
+  #scanInput{width:100%;background:var(--bg);color:var(--txt);border:3px solid var(--accent);border-radius:14px;padding:14px 18px;font-size:24px;font-weight:800;letter-spacing:1px}
+  .scanpage{display:flex;flex-direction:column;gap:12px;height:calc(100vh - 92px);overflow:hidden;padding:12px 30px 14px}
+  .scanmain{display:flex;gap:12px;flex:1;min-height:0}
+  .scanmain .scanresult{flex:2.2;margin-top:0;overflow:auto}
+  .scanlogcard{flex:1;min-width:300px;margin-top:0;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .scanlogcard h2{flex:none}
+  #scanLog{flex:1;overflow:auto;min-height:0}
   #scanInput:focus{outline:none;border-color:var(--ok);box-shadow:0 0 0 3px rgba(57,192,122,.2)}
   .scanmsg{min-width:200px;font-size:15px;font-weight:700}
   .scanmsg.ok{color:var(--ok)} .scanmsg.err{color:var(--err)}
@@ -353,7 +358,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v4.6</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v4.7</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -435,7 +440,7 @@ global.decryptXlsCFB=decryptXlsCFB;
     <div id="editPickState" style="margin-top:12px;font-size:12.5px;color:var(--dim)"></div>
     <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
       <button class="btn" id="editSave" style="flex:1">저장</button>
-      <button class="btn" id="editUnpick" style="background:var(--warn);color:#1a1408;display:none">픽업검수 취소</button>
+      <button class="btn" id="editUnpick" style="background:var(--warn);color:#1a1408;display:none">픽업검수 해제</button>
       <button class="btn" id="editDelete" style="background:var(--err)">이 주문 삭제</button>
       <button class="btn ghost sm" id="editCancel">취소</button>
     </div>
@@ -475,40 +480,40 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 
 <!-- ================= 바코드스캔 탭 ================= -->
-<div class="wrap" id="tabScan" style="display:none">
+<div class="wrap scanpage" id="tabScan" style="display:none">
   <div class="scanbar">
     <div class="scanwrap">
-      <label>송장번호 바코드 스캔 / 입력</label>
-      <input id="scanInput" type="text" placeholder="이 칸을 클릭 후 바코드를 스캔하세요 (스캔=자동 Enter)" autocomplete="off">
+      <input id="scanInput" type="text" placeholder="🔍 이 칸을 클릭 후 바코드를 스캔하세요 (스캔=자동 Enter)" autocomplete="off">
     </div>
     <div class="stat"><div>스캔 <b id="scanCnt">0</b></div><div>픽업완료 <b id="scanPicked" style="color:var(--ok)">0</b>/<b id="scanTotal">0</b></div></div>
   </div>
 
-  <div class="card scanresult" id="scanResult">
-    <div class="empty" id="scanEmpty">먼저 [픽업검수] 탭에서 송장 파일을 올린 뒤, 여기서 송장번호를 스캔하세요.</div>
-    <div id="scanHit" style="display:none;width:100%">
-      <div class="scangrid">
-        <div class="scell sbig"><label>수취인</label><div class="v" id="scanName">—</div></div>
-        <div class="scell sbig"><label>수량</label><div class="v" id="scanQty">—</div></div>
-        <div class="scell warnc span2" id="scanMsgCell" style="display:none"><label>🚨 물류 긴급 메세지</label><div class="v" id="scanUrgent"></div></div>
-        <div class="scell span2"><label>상품명</label><div class="v" id="scanProd">—</div></div>
-        <div class="scell"><label>옵션</label><div class="v" id="scanOpt">—</div></div>
-        <div class="scell"><label>주문사이트</label><div class="v" id="scanMall">—</div></div>
-      </div>
-      <div class="scanmeta" id="scanMeta"></div>
-      <div id="scanConfirm" style="display:none;margin-top:20px">
-        <div style="font-size:17px;font-weight:800;color:var(--warn);margin-bottom:12px">⚠️ 물류 메세지를 확인한 후 선택하세요</div>
-        <button class="btn" id="scanOkBtn" style="background:var(--ok);font-size:21px;padding:16px 30px;border-radius:14px">✅ 픽업검수 완료</button>
-        <button class="btn" id="scanNoBtn" style="background:var(--err);font-size:21px;padding:16px 30px;border-radius:14px;margin-left:10px">✋ 검수 보류</button>
+  <div class="scanmain">
+    <div class="card scanresult" id="scanResult">
+      <div class="empty" id="scanEmpty">먼저 [픽업검수] 탭에서 송장 파일을 올린 뒤, 여기서 송장번호를 스캔하세요.</div>
+      <div id="scanHit" style="display:none;width:100%">
+        <div class="scangrid">
+          <div class="scell sbig"><label>수취인</label><div class="v" id="scanName">—</div></div>
+          <div class="scell sbig"><label>수량</label><div class="v" id="scanQty">—</div></div>
+          <div class="scell warnc span2" id="scanMsgCell" style="display:none"><label>🚨 물류 긴급 메세지</label><div class="v" id="scanUrgent"></div></div>
+          <div class="scell span2"><label>상품명</label><div class="v" id="scanProd">—</div></div>
+          <div class="scell"><label>옵션</label><div class="v" id="scanOpt">—</div></div>
+          <div class="scell"><label>주문사이트</label><div class="v" id="scanMall">—</div></div>
+        </div>
+        <div class="scanmeta" id="scanMeta"></div>
+        <div id="scanConfirm" style="display:none;margin-top:14px">
+          <div style="font-size:16px;font-weight:800;color:var(--warn);margin-bottom:10px">⚠️ 물류 메세지를 확인한 후 선택하세요</div>
+          <button class="btn" id="scanOkBtn" style="background:var(--ok);font-size:20px;padding:13px 26px;border-radius:14px">✅ 픽업검수 완료</button>
+          <button class="btn" id="scanNoBtn" style="background:var(--err);font-size:20px;padding:13px 26px;border-radius:14px;margin-left:10px">✋ 검수 보류</button>
+        </div>
       </div>
     </div>
-  </div>
 
-  <div class="card">
-    <h2>오늘 스캔 기록</h2>
-    <div id="scanLog"><div class="empty">스캔 기록이 여기에 표시됩니다.</div></div>
+    <div class="card scanlogcard">
+      <h2>오늘 스캔 기록</h2>
+      <div id="scanLog"><div class="empty">스캔 기록이 여기에 표시됩니다.</div></div>
+    </div>
   </div>
-  <div class="foot">바코드 스캐너는 스캔 후 자동으로 Enter를 보냅니다. 입력창에 커서만 둔 채로 계속 스캔하세요.</div>
 </div>
 
 <script>
@@ -1361,7 +1366,7 @@ document.getElementById("editSave").addEventListener("click",()=>{
 });
 document.getElementById("editUnpick").addEventListener("click",()=>{
   if(editIdx<0) return; const r=pkData.rows[editIdx];
-  if(!confirm(`픽업검수를 취소할까요?\n${r.수취인||""} · ${r.송장||""}`)) return;
+  if(!confirm(`픽업검수를 해제할까요?\n${r.수취인||""} · ${r.송장||""}`)) return;
   r.picked=false; r.pickedAt="";
   savePk(); closeEdit(); renderPick(); pickStat(); renderScanUI();
 });
