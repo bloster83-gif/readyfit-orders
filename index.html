@@ -358,7 +358,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v4.7</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v4.8</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -1290,6 +1290,9 @@ function renderPick(){
     if(pf.size||hasRange) return true;
     return (r.added||todayStr())>=cut;
   });
+  // 주문일자 기준 오름차순 정렬 — 가장 최근 주문이 맨 아래
+  const dk=r=>onlyDigits(r.주문일자||r.added||"").slice(0,8)||"0";
+  rows.sort((a,b)=>{ const ka=dk(a.r), kb=dk(b.r); return ka<kb?-1:ka>kb?1:0; });
   let h=`<div class="tblwrap"><table><thead><tr>
     <th class="fz fz0"><input type="checkbox" class="chk" id="selAllChk" title="전체선택"></th><th class="fz fz1">업로드일자</th><th class="fz fz2">주문일자</th><th class="fz fz3">상태</th><th class="fz fz4">픽업검수시간</th><th class="fz fz5">수취인</th><th>송장번호</th><th>주문번호</th><th>주문사이트</th><th>상품명</th><th>옵션</th><th>수량</th><th>물류 긴급 메세지</th><th>송신</th><th>세부</th></tr></thead><tbody>`;
   h+=rows.map(({r,i})=>`<tr data-ri="${i}" class="${r.sent?'sent':r.picked?'picked':''}${r.msg&&String(r.msg).trim()?' urgent':''}">
