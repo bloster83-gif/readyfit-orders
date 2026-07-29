@@ -321,7 +321,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v3.4</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v3.5</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -365,28 +365,17 @@ global.decryptXlsCFB=decryptXlsCFB;
 
 <!-- ================= 픽업검수 탭 ================= -->
 <div class="wrap" id="tabPick" style="display:none">
-  <div class="card" id="pickDropCard">
-    <h2>1. 송장 파일 업로드</h2>
-    <div class="desc">이카운트 배송처리에서 받은 엑셀(송장번호 포함)을 올리세요. 수취인·주문번호·송장번호·상품·옵션·수량을 자동 인식합니다.</div>
-    <div class="drop" id="pickDrop">
-      <div class="site">송장 엑셀(.xlsx/.xls) 끌어놓기 또는 클릭</div>
-      <div class="hint" id="pickDropHint">업로드하면 아래에 픽업검수 목록이 뜹니다</div>
-    </div>
-    <div class="pastebox" id="pasteBox" tabindex="0">📋 또는 엑셀에서 표를 복사(Ctrl+C)한 뒤, 이 상자를 클릭하고 <b>Ctrl+V</b>로 붙여넣기</div>
-    <div class="desc" style="margin-top:10px">
-      양식: 첫 줄에 제목(헤더)이 있으면 자동 인식 — <b>송장번호</b>(필수) · 수취인 · 주문번호 · 오픈마켓명 · 상품명 · 옵션 · 수량 · 물류 긴급 메세지.
-      이카운트 배송처리 엑셀 그대로 OK. 헤더 없이 붙여넣으면 1열=송장번호, 2열=수취인, 3열=물류 긴급 메세지로 처리합니다.
-    </div>
-  </div>
-
-  <div id="pickPanel" style="display:none">
+  <div id="pickPanel">
     <div class="toolbar">
-      <input id="pickSearch" type="text" placeholder="🔍 수취인 · 송장번호 · 주문번호 검색" style="flex:1;min-width:220px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13px">
+      <button class="btn" id="uploadBtn">＋ 주문 업로드</button>
+      <input id="pickSearch" type="text" placeholder="🔍 수취인 · 송장번호 · 주문번호 검색 (전체 기간)" style="flex:1;min-width:220px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13px">
       <button class="btn" id="sendPickedBtn">픽업완료건 일괄 송신</button>
       <button class="btn ghost sm" id="sendAllBtn">전체 송신</button>
       <button class="btn ghost sm" id="unsendAllBtn">송신 해제</button>
       <button class="btn" id="pickDownloadBtn">엑셀 다운로드</button>
       <button class="btn ghost sm" id="pickClearBtn">초기화</button>
+      <button class="btn ghost sm" id="syncCfgBtn">서버 연동</button>
+      <span id="syncState" style="font-size:11.5px;color:var(--dim)"></span>
       <div class="stat">
         <div>총 <b id="pkTotal">0</b></div>
         <div>픽업완료 <b id="pkPicked" style="color:var(--ok)">0</b></div>
@@ -415,6 +404,38 @@ global.decryptXlsCFB=decryptXlsCFB;
   </div>
 </div>
 
+<!-- 업로드 모달 -->
+<div id="uploadModal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.55);align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;width:520px;max-height:85vh;overflow:auto">
+    <h2 style="margin:0 0 6px;font-size:15px">송장 파일 업로드</h2>
+    <div class="desc">이카운트 배송처리 엑셀을 올리면 기존 목록에 <b>누적 추가</b>됩니다(같은 주문은 자동 갱신).</div>
+    <div class="drop" id="pickDrop" style="margin-top:8px">
+      <div class="site">송장 엑셀(.xlsx/.xls) 끌어놓기 또는 클릭</div>
+      <div class="hint" id="pickDropHint">업로드하면 목록에 추가됩니다</div>
+    </div>
+    <div class="pastebox" id="pasteBox" tabindex="0">📋 또는 엑셀에서 표를 복사(Ctrl+C)한 뒤, 이 상자를 클릭하고 <b>Ctrl+V</b>로 붙여넣기</div>
+    <div class="desc" style="margin-top:10px">
+      양식: 헤더 자동 인식 — <b>송장번호</b>(필수) · 수취인 · 주문번호 · 오픈마켓명 · 상품명 · 옵션 · 수량 · 물류 긴급 메세지.
+      헤더 없이 붙여넣으면 1열=송장번호, 2열=수취인, 3열=물류 긴급 메세지.
+    </div>
+    <button class="btn ghost sm" id="uploadClose" style="margin-top:12px;width:100%">닫기</button>
+  </div>
+</div>
+
+<!-- CS메모 모달 -->
+<div id="memoModal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.55);align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;width:460px;max-height:85vh;overflow:auto">
+    <h2 style="margin:0 0 4px;font-size:15px">CS 메모</h2>
+    <div class="desc" id="memoWho"></div>
+    <div id="memoList" style="max-height:280px;overflow:auto;margin:10px 0;border:1px solid var(--line);border-radius:10px"></div>
+    <textarea id="memoText" placeholder="새 메모 입력…" style="width:100%;min-height:70px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:10px;font-size:13px"></textarea>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn" id="memoAdd" style="flex:1">메모 추가</button>
+      <button class="btn ghost sm" id="memoClose">닫기</button>
+    </div>
+  </div>
+</div>
+
 <!-- ================= 바코드스캔 탭 ================= -->
 <div class="wrap" id="tabScan" style="display:none">
   <div class="scanbar">
@@ -435,7 +456,7 @@ global.decryptXlsCFB=decryptXlsCFB;
   </div>
 
   <div class="card">
-    <h2>최근 스캔</h2>
+    <h2>오늘 스캔 기록</h2>
     <div id="scanLog"><div class="empty">스캔 기록이 여기에 표시됩니다.</div></div>
   </div>
   <div class="foot">바코드 스캐너는 스캔 후 자동으로 Enter를 보냅니다. 입력창에 커서만 둔 채로 계속 스캔하세요.</div>
@@ -972,6 +993,60 @@ function nowStr(){ const d=new Date(); const p=n=>String(n).padStart(2,"0");
   return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds()); }
 
 let pkData=null; let scanLog=[];
+const PK_KEY="rf_pick_v1", SYNC_KEY="rf_sync_url";
+let syncUrl=""; try{ syncUrl=localStorage.getItem(SYNC_KEY)||""; }catch(_){}
+function todayStr(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function stripRow(r){ const o=Object.assign({},r); delete o.cells; return o; }
+let pushTimer=null;
+function pushServer(){
+  if(!syncUrl||!pkData) return;
+  clearTimeout(pushTimer);
+  pushTimer=setTimeout(()=>{
+    try{ fetch(syncUrl,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({action:"save",rows:pkData.rows.map(stripRow)})})
+      .then(()=>setSyncState("ok")).catch(()=>setSyncState("err")); }catch(_){ setSyncState("err"); }
+  },1200);
+}
+function setSyncState(st){ const el=document.getElementById("syncState"); if(!el)return;
+  el.textContent = syncUrl? (st==="ok"?"서버저장 ✓": st==="err"?"서버저장 실패":"서버 연동됨") : "이 컴퓨터에만 저장";
+  el.style.color = st==="err"?"var(--err)":"var(--dim)"; }
+function savePk(){
+  try{ localStorage.setItem(PK_KEY, JSON.stringify({rows: pkData? pkData.rows.map(stripRow) : []})); }catch(_){}
+  pushServer();
+}
+async function pullServer(){
+  if(!syncUrl) return false;
+  try{
+    const res=await fetch(syncUrl+(syncUrl.includes("?")?"&":"?")+"action=load");
+    const j=await res.json();
+    if(j&&Array.isArray(j.rows)){
+      pkData={headers:[],idx:{},rows:j.rows};
+      savePkLocalOnly(); showPickPanel(`서버에서 ${j.rows.length}건 불러옴`);
+      setSyncState("ok"); return true;
+    }
+  }catch(_){ setSyncState("err"); }
+  return false;
+}
+function savePkLocalOnly(){ try{ localStorage.setItem(PK_KEY, JSON.stringify({rows: pkData? pkData.rows.map(stripRow) : []})); }catch(_){} }
+function showPickPanel(msg){
+  if(msg) document.getElementById("pickDropHint").textContent=msg;
+  const um=document.getElementById("uploadModal");
+  if(um&&um.style.display!=="none"&&msg&&msg.startsWith("✓")) setTimeout(()=>{um.style.display="none";},900);
+  renderPick(); pickStat(); renderScanUI();
+}
+document.getElementById("uploadBtn").addEventListener("click",()=>{ document.getElementById("uploadModal").style.display="flex"; });
+document.getElementById("uploadClose").addEventListener("click",()=>{ document.getElementById("uploadModal").style.display="none"; });
+document.getElementById("uploadModal").addEventListener("click",e=>{ if(e.target.id==="uploadModal") e.target.style.display="none"; });
+async function loadPk(){
+  const fromServer=await pullServer();
+  if(fromServer) return;
+  try{
+    const st=JSON.parse(localStorage.getItem(PK_KEY)||"null");
+    if(st&&st.rows&&st.rows.length){
+      pkData={headers:[],idx:{},rows:st.rows};
+      showPickPanel(`저장된 주문 ${st.rows.length}건 불러옴 — 최근 7일 표시, 이전 주문은 검색으로 조회`);
+    }
+  }catch(_){}
+}
 
 function pickHandleFile(file){
   const rd=new FileReader();
@@ -1021,10 +1096,18 @@ function pickLoadAOA(aoa, label){
     상품:g(r,"상품명"), 옵션:g(r,"옵션"), 수량:g(r,"수량"), msg:g(r,"물류메세지"),
     picked:false, sent:false, pickedAt:"" })).filter(r=>r.송장);
   if(!rows.length){alert("송장번호가 있는 행이 없습니다.");return;}
-  pkData={headers, idx, rows};
-  document.getElementById("pickPanel").style.display="";
-  document.getElementById("pickDropHint").textContent=`✓ ${label} — ${rows.length}건`;
-  renderPick(); pickStat(); renderScanUI();
+  if(!pkData) pkData={headers, idx, rows:[]};
+  const rkey=r=>String(r.송장)+"|"+String(r.주문);
+  const exmap=new Map(pkData.rows.map(r=>[rkey(r),r]));
+  let addedN=0, updN=0;
+  rows.forEach(nr=>{
+    nr.added=todayStr(); nr.memos=[];
+    const ex=exmap.get(rkey(nr));
+    if(ex){ ["주문일자","수취인","오픈마켓","상품","옵션","수량"].forEach(f=>{ if(nr[f]) ex[f]=nr[f]; }); if(nr.msg&&!ex.msg) ex.msg=nr.msg; updN++; }
+    else{ pkData.rows.push(nr); exmap.set(rkey(nr),nr); addedN++; }
+  });
+  savePk();
+  showPickPanel(`✓ ${label} — 신규 ${addedN}건 추가${updN?`, 기존 ${updN}건 갱신`:""} (누적 ${pkData.rows.length}건)`);
 }
 // 엑셀 복사(Ctrl+C) → 붙여넣기(Ctrl+V)
 function handlePasteText(text){
@@ -1066,11 +1149,12 @@ function pickStat(){
 }
 function renderPick(){
   const area=document.getElementById("pickArea");
-  if(!pkData||!pkData.rows.length){area.innerHTML=`<div class="empty">파일을 올리면 목록이 표시됩니다.</div>`;return;}
+  if(!pkData||!pkData.rows.length){area.innerHTML=`<div class="empty">아직 주문이 없습니다. 왼쪽 위 [＋ 주문 업로드]로 송장 파일을 올려주세요.</div>`;return;}
   const q=norm(document.getElementById("pickSearch").value||""); const qd=onlyDigits(q);
-  const rows=pkData.rows.map((r,i)=>({r,i})).filter(({r})=> !q || norm(r.수취인).includes(q)||(qd&&onlyDigits(r.송장).includes(qd))||norm(r.주문).includes(q));
+  const cut=(()=>{const d=new Date();d.setDate(d.getDate()-6);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");})();
+  const rows=pkData.rows.map((r,i)=>({r,i})).filter(({r})=> q ? (norm(r.수취인).includes(q)||(qd&&onlyDigits(r.송장).includes(qd))||norm(r.주문).includes(q)) : ((r.added||todayStr())>=cut));
   let h=`<div class="tblwrap"><table><thead><tr>
-    <th>주문일자</th><th>상태</th><th>픽업검수시간</th><th>수취인</th><th>송장번호</th><th>주문번호</th><th>오픈마켓</th><th>상품명</th><th>옵션</th><th>수량</th><th>물류 긴급 메세지</th><th>송신</th></tr></thead><tbody>`;
+    <th>주문일자</th><th>상태</th><th>픽업검수시간</th><th>수취인</th><th>송장번호</th><th>주문번호</th><th>오픈마켓</th><th>상품명</th><th>옵션</th><th>수량</th><th>물류 긴급 메세지</th><th>송신</th><th>세부</th></tr></thead><tbody>`;
   h+=rows.map(({r,i})=>`<tr data-ri="${i}" class="${r.sent?'sent':r.picked?'picked':''}">
     <td class="t">${r.주문일자||''}</td>
     <td>${r.picked?'<span class="pill done">픽업검수 완료</span>':'<span class="pill wait">대기</span>'}</td>
@@ -1079,31 +1163,29 @@ function renderPick(){
     <td>${(r.상품||'').slice(0,28)}</td><td>${(r.옵션||'').slice(0,20)}</td><td>${r.수량||''}</td>
     <td><input class="msgin" data-msg="${i}" value="${(r.msg||'').replace(/"/g,'&quot;')}" placeholder="긴급메세지"></td>
     <td style="text-align:center"><input type="checkbox" class="chk" data-sent="${i}" ${r.sent?'checked':''}> ${r.sent?'<span class="pill sent">송신</span>':''}</td>
+    <td style="white-space:nowrap"><button class="btn ghost sm" data-detail="${i}">세부정보</button> <button class="btn ghost sm" data-memo="${i}">CS메모${r.memos&&r.memos.length?`(${r.memos.length})`:''}</button></td>
   </tr>`).join("");
-  h+=`</tbody></table></div><div class="rowcount">${rows.length} / 전체 ${pkData.rows.length}건 표시</div>`;
+  h+=`</tbody></table></div><div class="rowcount">${rows.length}건 표시 · 누적 ${pkData.rows.length}건 ${q?"(전체 기간 검색결과)":"(최근 7일 — 이전 주문은 검색으로 조회)"}</div>`;
   area.innerHTML=h;
-  area.querySelectorAll("[data-msg]").forEach(inp=>inp.addEventListener("input",e=>{pkData.rows[+e.target.dataset.msg].msg=e.target.value;}));
-  area.querySelectorAll("[data-sent]").forEach(c=>c.addEventListener("change",e=>{pkData.rows[+e.target.dataset.sent].sent=e.target.checked;pickStat();renderPick();}));
+  area.querySelectorAll("[data-msg]").forEach(inp=>inp.addEventListener("input",e=>{pkData.rows[+e.target.dataset.msg].msg=e.target.value;savePk();}));
+  area.querySelectorAll("[data-sent]").forEach(c=>c.addEventListener("change",e=>{pkData.rows[+e.target.dataset.sent].sent=e.target.checked;savePk();pickStat();renderPick();}));
   area.querySelectorAll("tbody tr[data-ri]").forEach(tr=>tr.addEventListener("click",e=>{
-    if(e.target.tagName==="INPUT") return; // 메세지 입력·송신 체크는 제외
+    if(e.target.tagName==="INPUT"||e.target.tagName==="BUTTON") return;
     openEdit(+tr.dataset.ri);
   }));
+  area.querySelectorAll("[data-detail]").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();openEdit(+b.dataset.detail);}));
+  area.querySelectorAll("[data-memo]").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();openMemo(+b.dataset.memo);}));
 }
 document.getElementById("pickSearch").addEventListener("input",renderPick);
-document.getElementById("sendPickedBtn").addEventListener("click",()=>{ if(!pkData)return; let n=0; pkData.rows.forEach(r=>{if(r.picked&&!r.sent){r.sent=true;n++;}}); renderPick();pickStat(); alert(`픽업완료건 ${n}건을 송신 처리했습니다.`); });
-document.getElementById("sendAllBtn").addEventListener("click",()=>{ if(!pkData)return; if(!confirm("전체 주문을 송신 상태로 바꿀까요?"))return; pkData.rows.forEach(r=>r.sent=true); renderPick();pickStat(); });
-document.getElementById("unsendAllBtn").addEventListener("click",()=>{ if(!pkData)return; pkData.rows.forEach(r=>r.sent=false); renderPick();pickStat(); });
-document.getElementById("pickClearBtn").addEventListener("click",()=>{ if(!confirm("픽업검수 목록을 초기화할까요?"))return; pkData=null;scanLog=[]; document.getElementById("pickPanel").style.display="none"; document.getElementById("pickDropHint").textContent="업로드하면 아래에 픽업검수 목록이 뜹니다"; renderScanUI(); });
+document.getElementById("sendPickedBtn").addEventListener("click",()=>{ if(!pkData)return; let n=0; pkData.rows.forEach(r=>{if(r.picked&&!r.sent){r.sent=true;n++;}}); savePk(); renderPick();pickStat(); alert(`픽업완료건 ${n}건을 송신 처리했습니다.`); });
+document.getElementById("sendAllBtn").addEventListener("click",()=>{ if(!pkData)return; if(!confirm("전체 주문을 송신 상태로 바꿀까요?"))return; pkData.rows.forEach(r=>r.sent=true); savePk(); renderPick();pickStat(); });
+document.getElementById("unsendAllBtn").addEventListener("click",()=>{ if(!pkData)return; pkData.rows.forEach(r=>r.sent=false); savePk(); renderPick();pickStat(); });
+document.getElementById("pickClearBtn").addEventListener("click",()=>{ if(!confirm("픽업검수 목록을 초기화할까요?"))return; pkData=null;scanLog=[]; try{localStorage.removeItem(PK_KEY);}catch(_){} if(syncUrl){try{fetch(syncUrl,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({action:"save",rows:[]})});}catch(_){}} document.getElementById("pickDropHint").textContent="업로드하면 목록에 추가됩니다"; renderPick(); pickStat(); renderScanUI(); renderScanUI(); });
 
 document.getElementById("pickDownloadBtn").addEventListener("click",()=>{
   if(!pkData||!pkData.rows.length)return;
-  const H=pkData.headers.slice(), idx=Object.assign({},pkData.idx);
-  function ensure(key,label){ if(idx[key]<0){ idx[key]=H.length; H.push(label); } }
-  ensure("픽업완료","픽업검수"); ensure("픽업시간","픽업검수시간"); ensure("송신여부","송신여부"); ensure("물류메세지","물류 긴급 메세지");
-  const aoa=[H];
-  pkData.rows.forEach(r=>{ const row=r.cells.slice(); while(row.length<H.length) row.push("");
-    row[idx["픽업완료"]]=r.picked?"픽업검수 완료":""; row[idx["픽업시간"]]=r.pickedAt||"";
-    row[idx["송신여부"]]=r.sent?"송신":""; row[idx["물류메세지"]]=r.msg||""; aoa.push(row); });
+  const H=["주문일자","픽업검수","픽업검수시간","수취인","송장번호","주문번호","오픈마켓명","상품명","옵션","수량","물류 긴급 메세지","송신여부","업로드일","CS메모"];
+  const aoa=[H, ...pkData.rows.map(r=>[r.주문일자||"", r.picked?"픽업검수 완료":"", r.pickedAt||"", r.수취인||"", r.송장||"", r.주문||"", r.오픈마켓||"", r.상품||"", r.옵션||"", r.수량||"", r.msg||"", r.sent?"송신":"", r.added||"", (r.memos||[]).map(m=>`[${m.t}] ${m.text}`).join(" / ")])];
   const ws=XLSX.utils.aoa_to_sheet(aoa); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"픽업검수");
   const d=new Date(); const ymd=d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0");
   XLSX.writeFile(wb,`${ymd}_픽업검수.xlsx`);
@@ -1125,12 +1207,50 @@ document.getElementById("editModal").addEventListener("click",e=>{ if(e.target.i
 document.getElementById("editSave").addEventListener("click",()=>{
   if(editIdx<0) return; const r=pkData.rows[editIdx];
   document.querySelectorAll("#editFields [data-ef]").forEach(inp=>{ r[inp.dataset.ef]=inp.value; });
-  closeEdit(); renderPick(); pickStat();
+  savePk(); closeEdit(); renderPick(); pickStat();
 });
 document.getElementById("editDelete").addEventListener("click",()=>{
   if(editIdx<0) return; const r=pkData.rows[editIdx];
   if(!confirm(`이 주문을 목록에서 삭제할까요?\n${r.수취인||""} · ${r.송장||""}`)) return;
-  pkData.rows.splice(editIdx,1); closeEdit(); renderPick(); pickStat(); renderScanUI();
+  pkData.rows.splice(editIdx,1); savePk(); closeEdit(); renderPick(); pickStat(); renderScanUI();
+});
+
+/* ---- CS 메모 ---- */
+let memoIdx=-1;
+function renderMemoList(r){
+  const el=document.getElementById("memoList");
+  if(!r.memos||!r.memos.length){ el.innerHTML='<div class="empty" style="padding:18px">아직 메모가 없습니다.</div>'; return; }
+  el.innerHTML=r.memos.slice().reverse().map(m=>`<div class="logrow" style="align-items:flex-start"><span class="t" style="min-width:128px">${m.t}</span><span style="flex:1;white-space:pre-wrap">${m.text.replace(/</g,"&lt;")}</span></div>`).join("");
+}
+function openMemo(i){
+  if(!pkData||!pkData.rows[i]) return;
+  memoIdx=i; const r=pkData.rows[i];
+  if(!r.memos) r.memos=[];
+  document.getElementById("memoWho").textContent=`${r.수취인||""} · 송장 ${r.송장||""} · 주문 ${r.주문||""}`;
+  renderMemoList(r);
+  document.getElementById("memoText").value="";
+  document.getElementById("memoModal").style.display="flex";
+  setTimeout(()=>document.getElementById("memoText").focus(),50);
+}
+document.getElementById("memoClose").addEventListener("click",()=>{document.getElementById("memoModal").style.display="none";memoIdx=-1;});
+document.getElementById("memoModal").addEventListener("click",e=>{ if(e.target.id==="memoModal"){document.getElementById("memoModal").style.display="none";memoIdx=-1;} });
+document.getElementById("memoAdd").addEventListener("click",()=>{
+  if(memoIdx<0) return; const r=pkData.rows[memoIdx];
+  const txt=document.getElementById("memoText").value.trim(); if(!txt) return;
+  if(!r.memos) r.memos=[];
+  r.memos.push({t:nowStr(), text:txt});
+  document.getElementById("memoText").value="";
+  savePk(); renderMemoList(r); renderPick();
+});
+
+/* ---- 서버 연동 설정 ---- */
+document.getElementById("syncCfgBtn").addEventListener("click",()=>{
+  const u=prompt("서버 저장 주소를 입력하세요.\n(구글 Apps Script 웹앱 URL — 설정 방법은 안내문서 참고. 비우면 이 컴퓨터에만 저장)", syncUrl||"");
+  if(u===null) return;
+  syncUrl=u.trim();
+  try{ localStorage.setItem(SYNC_KEY, syncUrl); }catch(_){}
+  setSyncState();
+  if(syncUrl){ loadPk(); alert("서버 연동이 설정되었습니다. 이후 변경사항이 자동으로 서버에 저장됩니다."); }
 });
 
 /* ---- 바코드스캔 ---- */
@@ -1140,12 +1260,13 @@ function renderScanUI(){
   document.getElementById("scanCnt").textContent=scanLog.length;
   pickStat();
   const logEl=document.getElementById("scanLog");
-  if(!scanLog.length){ logEl.innerHTML=`<div class="empty">스캔 기록이 여기에 표시됩니다.</div>`; return; }
-  logEl.innerHTML=scanLog.slice(0,40).map((l,li)=>`<div class="logrow"><span class="t">${l.t}</span><span class="${l.ok?'ok':'er'}">${l.ok?'✓':'✗'}</span><span style="flex:1">${l.text}${l.cancelled?' <span class="pill wait">취소됨</span>':''}</span>${l.ok&&!l.cancelled?`<button class="btn ghost sm" data-cancel="${li}">픽업검수 취소</button>`:''}</div>`).join("");
+  const todayLog=scanLog.filter(l=>!l.d||l.d===todayStr());
+  if(!todayLog.length){ logEl.innerHTML=`<div class="empty">오늘 스캔 기록이 여기에 표시됩니다.</div>`; return; }
+  logEl.innerHTML=todayLog.slice(0,60).map((l)=>{const li=scanLog.indexOf(l);return `<div class="logrow"><span class="t">${l.t}</span><span class="${l.ok?'ok':'er'}">${l.ok?'✓':'✗'}</span><span style="flex:1">${l.text}${l.cancelled?' <span class="pill wait">취소됨</span>':''}</span>${l.ok&&!l.cancelled?`<button class="btn ghost sm" data-cancel="${li}">픽업검수 취소</button>`:''}</div>`;}).join("");
   logEl.querySelectorAll("[data-cancel]").forEach(b=>b.addEventListener("click",()=>{
     const l=scanLog[+b.dataset.cancel]; if(!l||!pkData) return;
     if(!confirm(`이 스캔을 취소할까요?\n${l.text}`)) return;
-    pkData.rows.forEach(r=>{ if(r.송장===l.inv){ r.picked=false; r.pickedAt=""; } });
+    pkData.rows.forEach(r=>{ if(r.송장===l.inv){ r.picked=false; r.pickedAt=""; } }); savePk();
     l.cancelled=true;
     renderPick(); pickStat(); renderScanUI();
     speak("픽업검수 취소");
@@ -1197,9 +1318,9 @@ function doScan(v){
   const hits=pkData.rows.filter(r=> r.송장 && (r.송장===val || (dv&&onlyDigits(r.송장)===dv)));
   const t=nowStr();
   if(hits.length){
-    hits.forEach(r=>{ r.picked=true; if(!r.pickedAt) r.pickedAt=t; });
+    hits.forEach(r=>{ r.picked=true; if(!r.pickedAt) r.pickedAt=t; }); savePk();
     scanResult(true, hits[0]);
-    scanLog.unshift({t:t.slice(11), ok:true, text:`${hits[0].수취인||''} · ${val}`, inv:hits[0].송장});
+    scanLog.unshift({d:todayStr(), t:t.slice(11), ok:true, text:`${hits[0].수취인||''} · ${val}`, inv:hits[0].송장});
     renderPick(); renderScanUI();
     const tr=document.querySelector(`#pickArea tr[data-ri="${pkData.rows.indexOf(hits[0])}"]`);
     if(tr){ tr.classList.remove("flash"); void tr.offsetWidth; tr.classList.add("flash"); }
@@ -1208,7 +1329,7 @@ function doScan(v){
     speak(nm+" 픽업완료"+(hits[0].msg?". 물류메세지 확인":""));
   }else{
     scanResult(false,null,`일치하는 송장번호가 없습니다: ${val}`);
-    scanLog.unshift({t:t.slice(11), ok:false, text:`미매칭 · ${val}`});
+    scanLog.unshift({d:todayStr(), t:t.slice(11), ok:false, text:`미매칭 · ${val}`});
     renderScanUI();
     speak("미등록 송장입니다");
   }
@@ -1235,6 +1356,10 @@ document.getElementById("scanInput").addEventListener("keydown",e=>{ if(e.key===
   inp.addEventListener("keydown",e=>{ if(e.key==="Enter") tryPw(); });
   setTimeout(()=>inp.focus(),100);
 })();
+
+/* 시작 시 저장된 픽업검수 데이터 불러오기 */
+setSyncState();
+try{ loadPk(); }catch(_){}
 </script>
 </body>
 </html>
