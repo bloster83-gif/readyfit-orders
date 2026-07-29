@@ -353,7 +353,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v4.2</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v4.4</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -407,8 +407,8 @@ global.decryptXlsCFB=decryptXlsCFB;
       <button class="fbtn" data-pf="memo">메모만</button>
       <button class="fbtn" data-pf="msg">물류메세지만</button>
       <button class="btn" id="sendPickedBtn">픽업완료건 일괄 송신</button>
-      <button class="pillbtn blue" id="sendAllBtn">📤 전체 송신</button>
-      <button class="pillbtn orange" id="unsendAllBtn">↩ 송신 해제</button>
+      <button class="pillbtn blue" id="sendAllBtn">📤 선택주문 송신</button>
+      <button class="pillbtn orange" id="unsendAllBtn">↩ 선택 송신해제</button>
       <button class="btn" id="pickDownloadBtn">엑셀 다운로드</button>
       <button class="btn ghost sm" id="delSelBtn" style="color:var(--err);border-color:var(--err)">선택 삭제</button>
       <button class="btn ghost sm" id="syncCfgBtn">서버 연동</button>
@@ -1015,6 +1015,7 @@ function showTab(t){
 document.getElementById("tabBtnMerge").addEventListener("click",()=>showTab("merge"));
 document.getElementById("tabBtnPick").addEventListener("click",()=>showTab("pick"));
 document.getElementById("tabBtnScan").addEventListener("click",()=>showTab("scan"));
+showTab("pick"); // 첫 화면: 픽업검수
 
 const PSYN={
   "송장번호":["송장번호","운송장번호","운송장","invoice","tracking"],
@@ -1316,8 +1317,9 @@ document.getElementById("pickSearch").addEventListener("input",renderPick);
 document.getElementById("pickFrom").addEventListener("change",renderPick);
 document.getElementById("pickTo").addEventListener("change",renderPick);
 document.getElementById("sendPickedBtn").addEventListener("click",()=>{ if(!pkData)return; let n=0; pkData.rows.forEach(r=>{if(r.picked&&!r.sent){r.sent=true;n++;}}); savePk(); renderPick();pickStat(); alert(`픽업완료건 ${n}건을 송신 처리했습니다.`); });
-document.getElementById("sendAllBtn").addEventListener("click",()=>{ if(!pkData)return; if(!confirm("전체 주문을 송신 상태로 바꿀까요?"))return; pkData.rows.forEach(r=>r.sent=true); savePk(); renderPick();pickStat(); });
-document.getElementById("unsendAllBtn").addEventListener("click",()=>{ if(!pkData)return; pkData.rows.forEach(r=>r.sent=false); savePk(); renderPick();pickStat(); });
+function selIdx(){ return [...document.querySelectorAll("#pickArea .selDel:checked")].map(c=>+c.dataset.del); }
+document.getElementById("sendAllBtn").addEventListener("click",()=>{ if(!pkData)return; const s=selIdx(); if(!s.length){alert("왼쪽 체크박스로 송신할 주문을 먼저 선택해주세요.");return;} s.forEach(i=>{if(pkData.rows[i])pkData.rows[i].sent=true;}); savePk(); renderPick();pickStat(); });
+document.getElementById("unsendAllBtn").addEventListener("click",()=>{ if(!pkData)return; const s=selIdx(); if(!s.length){alert("왼쪽 체크박스로 송신 해제할 주문을 먼저 선택해주세요.");return;} s.forEach(i=>{if(pkData.rows[i])pkData.rows[i].sent=false;}); savePk(); renderPick();pickStat(); });
 document.querySelectorAll(".fbtn[data-pf]").forEach(b=>b.addEventListener("click",()=>{
   const f=b.dataset.pf;
   pkFilter = (pkFilter===f) ? null : f;
