@@ -301,6 +301,8 @@ global.decryptXlsCFB=decryptXlsCFB;
   .logrow{display:flex;gap:12px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line);font-size:13px}
   .logrow .t{color:var(--dim);font-variant-numeric:tabular-nums}
   .logrow .ok{color:var(--ok);font-weight:700} .logrow .er{color:var(--err);font-weight:700}
+  .pastebox{margin-top:12px;border:1.5px dashed var(--line);border-radius:12px;padding:14px;text-align:center;color:var(--dim);font-size:13px;cursor:pointer;background:var(--panel2);transition:.15s}
+  .pastebox:hover,.pastebox:focus{border-color:var(--accent);color:var(--txt);outline:none;background:#1b2130}
 </style>
 </head>
 <body>
@@ -316,7 +318,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v2.9</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v3.0</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -364,6 +366,11 @@ global.decryptXlsCFB=decryptXlsCFB;
     <div class="drop" id="pickDrop">
       <div class="site">송장 엑셀(.xlsx/.xls) 끌어놓기 또는 클릭</div>
       <div class="hint" id="pickDropHint">업로드하면 아래에 픽업검수 목록이 뜹니다</div>
+    </div>
+    <div class="pastebox" id="pasteBox" tabindex="0">📋 또는 엑셀에서 표를 복사(Ctrl+C)한 뒤, 이 상자를 클릭하고 <b>Ctrl+V</b>로 붙여넣기</div>
+    <div class="desc" style="margin-top:10px">
+      양식: 첫 줄에 제목(헤더)이 있으면 자동 인식 — <b>송장번호</b>(필수) · 수취인 · 주문번호 · 오픈마켓명 · 상품명 · 옵션 · 수량 · 물류 긴급 메세지.
+      이카운트 배송처리 엑셀 그대로 OK. 헤더 없이 붙여넣으면 1열=송장번호, 2열=수취인, 3열=물류 긴급 메세지로 처리합니다.
     </div>
   </div>
 
@@ -906,26 +913,65 @@ function pickHandleFile(file){
       }
       const wb=XLSX.read(data,{type:"array"});
       const aoa=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:"",raw:false});
-      if(!aoa.length){alert("빈 파일입니다.");return;}
-      let hr=0,bs=-1;
-      for(let r=0;r<Math.min(aoa.length,15);r++){const H=(aoa[r]||[]).map(norm);let s=0;for(const k in PSYN){for(const c of PSYN[k]){if(H.includes(norm(c))){s++;break;}}}if(s>bs){bs=s;hr=r;}}
-      const headers=(aoa[hr]||[]).map(h=>String(h).trim());
-      const idx={}; for(const k in PSYN) idx[k]=pguess(headers,k);
-      if(idx["송장번호"]<0){ alert("송장번호 컬럼을 찾지 못했습니다."); return; }
-      const raw=aoa.slice(hr+1).filter(r=>r.some(c=>String(c).trim()!==""));
-      const g=(r,k)=> idx[k]>=0?String(r[idx[k]]??"").trim():"";
-      const rows=raw.map(r=>({ cells:r.slice(),
-        송장:g(r,"송장번호"), 주문:g(r,"주문번호"), 수취인:g(r,"수취인"), 오픈마켓:g(r,"오픈마켓명"),
-        상품:g(r,"상품명"), 옵션:g(r,"옵션"), 수량:g(r,"수량"), msg:g(r,"물류메세지"),
-        picked:false, sent:false, pickedAt:"" }));
-      pkData={headers, idx, rows};
-      document.getElementById("pickPanel").style.display="";
-      document.getElementById("pickDropHint").textContent=`✓ ${file.name} — ${rows.length}건`;
-      renderPick(); pickStat();
+      pickLoadAOA(aoa, file.name);
     }catch(err){ alert("파일을 읽지 못했습니다: "+err.message); }
   };
   rd.readAsArrayBuffer(file);
 }
+// 표 데이터(AOA) → 픽업검수 목록 (파일 업로드·붙여넣기 공용)
+function pickLoadAOA(aoa, label){
+  aoa=(aoa||[]).filter(r=>r&&r.some(c=>String(c).trim()!==""));
+  if(!aoa.length){alert("데이터가 비어 있습니다.");return;}
+  let hr=0,bs=-1;
+  for(let r=0;r<Math.min(aoa.length,15);r++){const H=(aoa[r]||[]).map(norm);let s=0;for(const k in PSYN){for(const c of PSYN[k]){if(H.includes(norm(c))){s++;break;}}}if(s>bs){bs=s;hr=r;}}
+  let headers=(aoa[hr]||[]).map(h=>String(h).trim());
+  let idx={}; for(const k in PSYN) idx[k]=pguess(headers,k);
+  let body;
+  if(idx["송장번호"]>=0){
+    body=aoa.slice(hr+1);
+  }else{
+    // 헤더 없음: 1열이 숫자 송장번호처럼 보이면 [송장번호,수취인,물류메세지] 순서로 간주
+    const d0=onlyDigits(aoa[0][0]||"");
+    if(d0.length>=9){
+      headers=["송장번호","수취인","물류 긴급 메세지"];
+      for(let c=3;c<(aoa[0]||[]).length;c++) headers.push("열"+(c+1));
+      for(const k in PSYN) idx[k]=pguess(headers,k);
+      body=aoa;
+    }else{ alert("송장번호 컬럼을 찾지 못했습니다.\n헤더에 '송장번호'가 있거나, 1열이 송장번호인 표를 올려주세요."); return; }
+  }
+  const raw=body.filter(r=>r.some(c=>String(c).trim()!==""));
+  const g=(r,k)=> idx[k]>=0?String(r[idx[k]]??"").trim():"";
+  const rows=raw.map(r=>({ cells:r.slice(),
+    송장:g(r,"송장번호"), 주문:g(r,"주문번호"), 수취인:g(r,"수취인"), 오픈마켓:g(r,"오픈마켓명"),
+    상품:g(r,"상품명"), 옵션:g(r,"옵션"), 수량:g(r,"수량"), msg:g(r,"물류메세지"),
+    picked:false, sent:false, pickedAt:"" })).filter(r=>r.송장);
+  if(!rows.length){alert("송장번호가 있는 행이 없습니다.");return;}
+  pkData={headers, idx, rows};
+  document.getElementById("pickPanel").style.display="";
+  document.getElementById("pickDropHint").textContent=`✓ ${label} — ${rows.length}건`;
+  renderPick(); pickStat(); renderScanUI();
+}
+// 엑셀 복사(Ctrl+C) → 붙여넣기(Ctrl+V)
+function handlePasteText(text){
+  const t=String(text||"").replace(/\r/g,"");
+  if(!t.trim()) return;
+  const aoa=t.split("\n").filter(l=>l.trim()!=="").map(l=>l.split("\t"));
+  pickLoadAOA(aoa, "붙여넣기");
+}
+document.getElementById("pasteBox").addEventListener("paste",e=>{
+  e.preventDefault();
+  handlePasteText(e.clipboardData.getData("text"));
+});
+document.getElementById("pasteBox").addEventListener("click",e=>e.target.focus());
+// 픽업검수 탭이 열려있으면 아무 곳에나 Ctrl+V 해도 동작
+document.addEventListener("paste",e=>{
+  if(document.getElementById("tabPick").style.display==="none") return;
+  const tg=e.target;
+  if(tg&&(tg.tagName==="INPUT"||tg.tagName==="TEXTAREA")) return; // 검색·메세지 입력칸은 제외
+  if(tg&&tg.id==="pasteBox") return; // 전용 핸들러가 처리
+  e.preventDefault();
+  handlePasteText(e.clipboardData.getData("text"));
+});
 (function(){
   const d=document.getElementById("pickDrop");
   d.addEventListener("click",()=>{const i=document.createElement("input");i.type="file";i.accept=".xlsx,.xls";i.onchange=e=>{if(e.target.files[0])pickHandleFile(e.target.files[0]);};i.click();});
@@ -1010,6 +1056,15 @@ function scanResult(hit, rec, extra){
     document.getElementById("scanMeta").textContent=extra||"";
   }
 }
+// 현장 음성 안내 (TTS)
+function speak(txt){
+  try{
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(txt);
+    u.lang="ko-KR"; u.rate=1.05; u.volume=1;
+    speechSynthesis.speak(u);
+  }catch(_){}
+}
 function doScan(v){
   const val=String(v||"").trim(); if(!val) return;
   if(!pkData){ scanResult(false,null,"먼저 픽업검수 탭에서 송장 파일을 올려주세요."); return; }
@@ -1023,10 +1078,14 @@ function doScan(v){
     renderPick(); renderScanUI();
     const tr=document.querySelector(`#pickArea tr[data-ri="${pkData.rows.indexOf(hits[0])}"]`);
     if(tr){ tr.classList.remove("flash"); void tr.offsetWidth; tr.classList.add("flash"); }
+    // 음성: "홍길동 픽업완료 (물류메세지 확인)"
+    const nm=(hits[0].수취인||"").replace(/\(.*?\)/g,"").trim();
+    speak(nm+" 픽업완료"+(hits[0].msg?". 물류메세지 확인":""));
   }else{
     scanResult(false,null,`일치하는 송장번호가 없습니다: ${val}`);
     scanLog.unshift({t:t.slice(11), ok:false, text:`미매칭 · ${val}`});
     renderScanUI();
+    speak("미등록 송장입니다");
   }
 }
 document.getElementById("scanInput").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); doScan(e.target.value); e.target.value=""; e.target.focus(); } });
