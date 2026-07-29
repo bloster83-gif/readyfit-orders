@@ -321,7 +321,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v3.5</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v3.6</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -1067,6 +1067,53 @@ function pickHandleFile(file){
   };
   rd.readAsArrayBuffer(file);
 }
+// 헤더 없는 표: 데이터 내용으로 컬럼 자동 판별 (이카운트 배송처리 그리드 복사 대응)
+function classifyCols(aoa){
+  const n=Math.max(...aoa.map(r=>r.length));
+  const sample=aoa.slice(0,40);
+  const colVals=c=>sample.map(r=>String(r[c]??"").trim()).filter(v=>v!=="");
+  const frac=(v,f)=>v.length? v.filter(f).length/v.length : 0;
+  const mallRe=/(스토어|클랜|쿠팡|쇼핑|마켓|이지웰|플러스|하프|지마켓|옥션|gs|톡스토어|에이블리|자동\)|\(주\))/i;
+  const stateRe=/^(\[주문\]|미전송|출고|배송준비|전송)/;
+  const sc=[];
+  for(let c=0;c<n;c++){
+    const v=colVals(c);
+    if(!v.length){ sc.push(null); continue; }
+    const uniq=new Set(v).size/v.length;
+    sc.push({
+      date:frac(v,x=>/^\d{4}[./-]\d{1,2}[./-]\d{1,2}/.test(x)),
+      inv:frac(v,x=>/^\d{10,14}$/.test(x)),
+      ordno:frac(v,x=>/^\d{14,}[A-Za-z]?$/.test(x)),
+      mall:frac(v,x=>mallRe.test(x)),
+      state:frac(v,x=>stateRe.test(x)),
+      opt:frac(v,x=>/(색상|사이즈|선택\d|기장|스타일)/.test(x)),
+      qty:frac(v,x=>/^\d{1,3}$/.test(x)&&+x>0&&+x<1000),
+      kor:frac(v,x=>/^[가-힣A-Za-z0-9()·\s]{1,15}$/.test(x)&&/[가-힣]/.test(x)),
+      addr:frac(v,x=>x.length>15&&/(특별시|광역시|도 |시 |군 |구 |로 |길 )/.test(x)),
+      avgLen:v.reduce((a,x)=>a+x.length,0)/v.length,
+      uniq
+    });
+  }
+  const idx={"송장번호":-1,"주문번호":-1,"수취인":-1,"오픈마켓명":-1,"상품명":-1,"옵션":-1,"수량":-1,"주문일자":-1,"물류메세지":-1};
+  const used=new Set();
+  const firstAbove=(key,th)=>{ for(let c=0;c<n;c++){ if(sc[c]&&!used.has(c)&&sc[c][key]>=th) return c; } return -1; };
+  const maxOf=(key,th,extra)=>{ let bi=-1,bv=th; for(let c=0;c<n;c++){ if(!sc[c]||used.has(c)) continue; if(extra&&!extra(sc[c],c)) continue; if(sc[c][key]>bv){bv=sc[c][key];bi=c;} } return bi; };
+  // 주문번호: 14자리 이상 숫자열 중 첫 컬럼 / 송장번호: 10~14자리 숫자열 최다 컬럼
+  idx["주문번호"]=firstAbove("ordno",0.5); if(idx["주문번호"]>=0)used.add(idx["주문번호"]);
+  idx["송장번호"]=maxOf("inv",0.5); if(idx["송장번호"]>=0)used.add(idx["송장번호"]);
+  idx["주문일자"]=firstAbove("date",0.5); if(idx["주문일자"]>=0)used.add(idx["주문일자"]);
+  idx["오픈마켓명"]=maxOf("mall",0.4); if(idx["오픈마켓명"]>=0)used.add(idx["오픈마켓명"]);
+  idx["옵션"]=maxOf("opt",0.3); if(idx["옵션"]>=0)used.add(idx["옵션"]);
+  idx["상품명"]=maxOf("avgLen",0,(x)=>x.addr<0.4&&x.mall<0.3&&x.state<0.3&&x.date<0.3&&x.inv<0.3&&x.ordno<0.3&&x.avgLen>=12);
+  if(idx["상품명"]>=0)used.add(idx["상품명"]);
+  idx["수취인"]=maxOf("kor",0.6,(x)=>x.uniq>=0.4&&x.state<0.2&&x.mall<0.2&&x.opt<0.2&&x.avgLen<=12);
+  if(idx["수취인"]>=0)used.add(idx["수취인"]);
+  // 수량: 상품/옵션 컬럼 뒤쪽의 1~3자리 숫자 컬럼
+  const after=Math.max(idx["옵션"],idx["상품명"],idx["송장번호"]);
+  for(let c=after+1;c<n;c++){ if(sc[c]&&!used.has(c)&&sc[c].qty>=0.7&&sc[c].avgLen<=3){ idx["수량"]=c; used.add(c); break; } }
+  return idx;
+}
+
 // 표 데이터(AOA) → 픽업검수 목록 (파일 업로드·붙여넣기 공용)
 function pickLoadAOA(aoa, label){
   aoa=(aoa||[]).filter(r=>r&&r.some(c=>String(c).trim()!==""));
@@ -1079,14 +1126,24 @@ function pickLoadAOA(aoa, label){
   if(idx["송장번호"]>=0){
     body=aoa.slice(hr+1);
   }else{
-    // 헤더 없음: 1열이 숫자 송장번호처럼 보이면 [송장번호,수취인,물류메세지] 순서로 간주
-    const d0=onlyDigits(aoa[0][0]||"");
-    if(d0.length>=9){
+    // 헤더 없음
+    const ncol=Math.max(...aoa.map(r=>r.length));
+    if(ncol<=4 && /^\d{9,}$/.test(onlyDigits(aoa[0][0]||"")) && String(aoa[0][0]).replace(/[^0-9]/g,"").length===String(aoa[0][0]).trim().length){
+      // 좁은 표: 1열=송장번호, 2열=수취인, 3열=물류메세지
       headers=["송장번호","수취인","물류 긴급 메세지"];
-      for(let c=3;c<(aoa[0]||[]).length;c++) headers.push("열"+(c+1));
+      for(let c=3;c<ncol;c++) headers.push("열"+(c+1));
       for(const k in PSYN) idx[k]=pguess(headers,k);
       body=aoa;
-    }else{ alert("송장번호 컬럼을 찾지 못했습니다.\n헤더에 '송장번호'가 있거나, 1열이 송장번호인 표를 올려주세요."); return; }
+    }else{
+      // 넓은 표(이카운트 그리드 복사 등): 데이터 내용으로 컬럼 자동 판별
+      const ci=classifyCols(aoa);
+      if(ci["송장번호"]<0){ alert("송장번호 컬럼을 찾지 못했습니다.\n헤더 줄을 포함해서 복사하거나, 송장번호가 포함된 표인지 확인해주세요."); return; }
+      idx={}; for(const k in PSYN) idx[k]=-1;
+      idx["송장번호"]=ci["송장번호"]; idx["주문번호"]=ci["주문번호"]; idx["수취인"]=ci["수취인"];
+      idx["오픈마켓명"]=ci["오픈마켓명"]; idx["상품명"]=ci["상품명"]; idx["옵션"]=ci["옵션"];
+      idx["수량"]=ci["수량"]; idx["주문일자"]=ci["주문일자"];
+      headers=[]; body=aoa;
+    }
   }
   const raw=body.filter(r=>r.some(c=>String(c).trim()!==""));
   const g=(r,k)=> idx[k]>=0?String(r[idx[k]]??"").trim():"";
@@ -1099,6 +1156,12 @@ function pickLoadAOA(aoa, label){
   if(!pkData) pkData={headers, idx, rows:[]};
   const rkey=r=>String(r.송장)+"|"+String(r.주문);
   const exmap=new Map(pkData.rows.map(r=>[rkey(r),r]));
+  // 중복 검사: 전부 기존 주문이면 차단
+  const dupN=rows.filter(nr=>exmap.has(rkey(nr))).length;
+  if(rows.length>0 && dupN===rows.length){
+    alert(`⚠ 이미 업로드된 데이터입니다.\n${rows.length}건 전부 기존 목록에 있는 주문이라 추가하지 않았습니다.`);
+    return;
+  }
   let addedN=0, updN=0;
   rows.forEach(nr=>{
     nr.added=todayStr(); nr.memos=[];
@@ -1107,7 +1170,7 @@ function pickLoadAOA(aoa, label){
     else{ pkData.rows.push(nr); exmap.set(rkey(nr),nr); addedN++; }
   });
   savePk();
-  showPickPanel(`✓ ${label} — 신규 ${addedN}건 추가${updN?`, 기존 ${updN}건 갱신`:""} (누적 ${pkData.rows.length}건)`);
+  showPickPanel(`✓ ${label} — 신규 ${addedN}건 추가${updN?`, 중복 ${updN}건 갱신`:""} (누적 ${pkData.rows.length}건)`);
 }
 // 엑셀 복사(Ctrl+C) → 붙여넣기(Ctrl+V)
 function handlePasteText(text){
