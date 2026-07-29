@@ -296,6 +296,8 @@ global.decryptXlsCFB=decryptXlsCFB;
   .pillbtn.blue:hover{background:rgba(79,140,255,.12)}
   .pillbtn.orange{border:2px solid var(--warn);color:var(--warn)}
   .pillbtn.orange:hover{background:rgba(245,166,35,.12)}
+  .datein{background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:12.5px;color-scheme:dark}
+  .datein:focus{outline:none;border-color:var(--accent)}
   tr.flash td{animation:flash .8s}
   @keyframes flash{0%{background:#2c7a4d!important}100%{}}
   .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700}
@@ -351,7 +353,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v4.1</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v4.2</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -398,7 +400,8 @@ global.decryptXlsCFB=decryptXlsCFB;
   <div id="pickPanel">
     <div class="toolbar">
       <button class="btn" id="uploadBtn">＋ 주문 업로드</button>
-      <input id="pickSearch" type="text" placeholder="🔍 수취인 · 송장 · 주문번호 · 날짜(0729) 검색" style="flex:1;min-width:220px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13px">
+      <input id="pickSearch" type="text" placeholder="🔍 수취인 · 송장 · 주문번호 · 날짜(0729) 검색" style="flex:1;min-width:200px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13px">
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)">📅 <input type="date" id="pickFrom" class="datein"> ~ <input type="date" id="pickTo" class="datein"></span>
       <button class="fbtn" data-pf="unsent">미송신만</button>
       <button class="fbtn" data-pf="picked">픽업검수만</button>
       <button class="fbtn" data-pf="memo">메모만</button>
@@ -1263,13 +1266,21 @@ function renderPick(){
   const q=norm(document.getElementById("pickSearch").value||""); const qd=onlyDigits(q);
   const cut=(()=>{const d=new Date();d.setDate(d.getDate()-6);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");})();
   const pf=pkFilter;
+  const n1=onlyDigits((document.getElementById("pickFrom")||{}).value||"").slice(0,8);
+  const n2=onlyDigits((document.getElementById("pickTo")||{}).value||"").slice(0,8);
+  const hasRange=!!(n1||n2);
   const rows=pkData.rows.map((r,i)=>({r,i})).filter(({r})=>{
     if(pf==="unsent" && r.sent) return false;
     if(pf==="picked" && !r.picked) return false;
     if(pf==="memo" && !(r.memos&&r.memos.length)) return false;
     if(pf==="msg" && !(r.msg&&String(r.msg).trim())) return false;
+    if(hasRange){
+      const a=onlyDigits(r.added||"").slice(0,8), o=onlyDigits(r.주문일자||"").slice(0,8);
+      const ok=(x)=> x && (!n1||x>=n1) && (!n2||x<=n2);
+      if(!ok(a)&&!ok(o)) return false;
+    }
     if(q) return norm(r.수취인).includes(q)||(qd&&onlyDigits(r.송장).includes(qd))||norm(r.주문).includes(q)||(qd&&qd.length>=3&&(onlyDigits(r.added||"").includes(qd)||onlyDigits(r.주문일자||"").includes(qd)));
-    if(pf) return true;
+    if(pf||hasRange) return true;
     return (r.added||todayStr())>=cut;
   });
   let h=`<div class="tblwrap"><table><thead><tr>
@@ -1287,7 +1298,8 @@ function renderPick(){
     <td style="white-space:nowrap"><button class="btn ghost sm xs" data-detail="${i}">세부</button> <button class="btn ghost sm xs ${r.memos&&r.memos.length?'hasmemo':''}" data-memo="${i}">메모${r.memos&&r.memos.length?`(${r.memos.length})`:''}</button></td>
   </tr>`).join("");
   const pfName={unsent:"미송신",picked:"픽업검수 완료",memo:"메모 있음",msg:"물류메세지 있음"}[pf];
-  h+=`</tbody></table></div><div class="rowcount">${rows.length}건 표시 · 누적 ${pkData.rows.length}건 ${q?"(전체 기간 검색결과)":pf?`(전체 기간 · ${pfName}만)`:"(최근 7일 — 이전 주문은 검색으로 조회)"}</div>`;
+  const scopeTxt = hasRange?`(날짜 ${n1||'처음'}~${n2||'끝'}${pfName?' · '+pfName+'만':''}${q?' · 검색':''})` : q?"(전체 기간 검색결과)" : pf?`(전체 기간 · ${pfName}만)` : "(최근 7일 — 이전 주문은 검색으로 조회)";
+  h+=`</tbody></table></div><div class="rowcount">${rows.length}건 표시 · 누적 ${pkData.rows.length}건 ${scopeTxt}</div>`;
   area.innerHTML=h;
   area.querySelectorAll("[data-msg]").forEach(inp=>inp.addEventListener("input",e=>{pkData.rows[+e.target.dataset.msg].msg=e.target.value;savePk();}));
   area.querySelectorAll("[data-sent]").forEach(c=>c.addEventListener("change",e=>{pkData.rows[+e.target.dataset.sent].sent=e.target.checked;savePk();pickStat();renderPick();}));
@@ -1301,6 +1313,8 @@ function renderPick(){
   if(sa) sa.addEventListener("change",()=>{ area.querySelectorAll(".selDel").forEach(c=>c.checked=sa.checked); });
 }
 document.getElementById("pickSearch").addEventListener("input",renderPick);
+document.getElementById("pickFrom").addEventListener("change",renderPick);
+document.getElementById("pickTo").addEventListener("change",renderPick);
 document.getElementById("sendPickedBtn").addEventListener("click",()=>{ if(!pkData)return; let n=0; pkData.rows.forEach(r=>{if(r.picked&&!r.sent){r.sent=true;n++;}}); savePk(); renderPick();pickStat(); alert(`픽업완료건 ${n}건을 송신 처리했습니다.`); });
 document.getElementById("sendAllBtn").addEventListener("click",()=>{ if(!pkData)return; if(!confirm("전체 주문을 송신 상태로 바꿀까요?"))return; pkData.rows.forEach(r=>r.sent=true); savePk(); renderPick();pickStat(); });
 document.getElementById("unsendAllBtn").addEventListener("click",()=>{ if(!pkData)return; pkData.rows.forEach(r=>r.sent=false); savePk(); renderPick();pickStat(); });
