@@ -276,17 +276,57 @@ global.decryptXlsCFB=decryptXlsCFB;
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
   .seg button{background:transparent;border:none;color:var(--dim);padding:8px 14px;font-size:12.5px;cursor:pointer;font-weight:600}
   .seg button.on{background:var(--accent);color:#fff}
+  .scanbar{display:flex;gap:16px;align-items:center;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:16px}
+  .scanwrap{flex:1;min-width:280px}
+  .scanwrap label{display:block;font-size:12px;color:var(--dim);margin-bottom:6px;font-weight:600}
+  #scanInput{width:100%;background:var(--bg);color:var(--txt);border:2px solid var(--accent);border-radius:10px;padding:14px 16px;font-size:18px;font-weight:700;letter-spacing:.5px}
+  #scanInput:focus{outline:none;border-color:var(--ok);box-shadow:0 0 0 3px rgba(57,192,122,.2)}
+  .scanmsg{min-width:200px;font-size:15px;font-weight:700}
+  .scanmsg.ok{color:var(--ok)} .scanmsg.err{color:var(--err)}
+  tr.picked td{background:#16301f!important}
+  tr.sent td{background:#152238!important}
+  tr.flash td{animation:flash .8s}
+  @keyframes flash{0%{background:#2c7a4d!important}100%{}}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700}
+  .pill.done{background:#1c4a30;color:#5fe0a0} .pill.wait{background:#3a2417;color:#f5a56b}
+  .pill.sent{background:#1e3a5f;color:#8fc0ff}
+  td .msgin{width:150px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:4px 7px;font-size:12px}
+  td .chk{width:17px;height:17px;cursor:pointer;accent-color:var(--accent)}
+  .scanresult{min-height:150px;display:flex;align-items:center;justify-content:center;text-align:center}
+  .scanname{font-size:46px;font-weight:800;color:var(--txt);letter-spacing:1px}
+  .scanurgent{margin-top:12px;font-size:22px;font-weight:700;color:var(--warn);min-height:26px}
+  .scanmeta{margin-top:10px;color:var(--dim);font-size:14px}
+  .scanresult.hit{border-color:var(--ok);box-shadow:0 0 0 2px rgba(57,192,122,.25)}
+  .scanresult.miss{border-color:var(--err);box-shadow:0 0 0 2px rgba(255,92,108,.25)}
+  .logrow{display:flex;gap:12px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line);font-size:13px}
+  .logrow .t{color:var(--dim);font-variant-numeric:tabular-nums}
+  .logrow .ok{color:var(--ok);font-weight:700} .logrow .er{color:var(--err);font-weight:700}
 </style>
 </head>
 <body>
+<!-- 접속 암호 게이트 -->
+<div id="gate" style="position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:32px 28px;width:320px;text-align:center">
+    <div style="font-size:20px;font-weight:800;margin-bottom:6px">레디핏 주문 도구</div>
+    <div style="color:var(--dim);font-size:12.5px;margin-bottom:18px">접속 암호를 입력하세요</div>
+    <input id="gatePw" type="password" placeholder="암호" style="width:100%;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:11px 12px;font-size:15px;text-align:center">
+    <div id="gateErr" style="color:var(--err);font-size:12px;height:16px;margin:8px 0"></div>
+    <button id="gateBtn" class="btn" style="width:100%">입장</button>
+  </div>
+</div>
 <header>
   <div>
-    <h1>레디핏 주문취합 도구 <span class="badge">v2.8</span></h1>
-    <div class="sub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드 (오너클랜·패션플러스·이제너두·K쇼핑·톡스토어·GS샵 등)</div>
+    <h1>레디핏 주문 도구 <span class="badge">v2.9</span></h1>
+    <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
+  </div>
+  <div class="seg">
+    <button id="tabBtnMerge" class="on">주문취합</button>
+    <button id="tabBtnPick">픽업검수</button>
+    <button id="tabBtnScan">바코드스캔</button>
   </div>
 </header>
 
-<div class="wrap">
+<div class="wrap" id="tabMerge">
   <div class="grid" id="dropGrid"></div>
 
   <div class="toolbar">
@@ -314,6 +354,66 @@ global.decryptXlsCFB=decryptXlsCFB;
     모든 처리는 브라우저 안에서만 이루어지며, 주문 데이터가 외부로 전송되지 않습니다.<br>
     통합 취합본 = 이카운트 쇼핑몰관리 &quot;웹자료올리기&quot; 업로드 파일. 다운로드해서 이카운트에 끌어다 놓으세요.
   </div>
+</div>
+
+<!-- ================= 픽업검수 탭 ================= -->
+<div class="wrap" id="tabPick" style="display:none">
+  <div class="card" id="pickDropCard">
+    <h2>1. 송장 파일 업로드</h2>
+    <div class="desc">이카운트 배송처리에서 받은 엑셀(송장번호 포함)을 올리세요. 수취인·주문번호·송장번호·상품·옵션·수량을 자동 인식합니다.</div>
+    <div class="drop" id="pickDrop">
+      <div class="site">송장 엑셀(.xlsx/.xls) 끌어놓기 또는 클릭</div>
+      <div class="hint" id="pickDropHint">업로드하면 아래에 픽업검수 목록이 뜹니다</div>
+    </div>
+  </div>
+
+  <div id="pickPanel" style="display:none">
+    <div class="toolbar">
+      <input id="pickSearch" type="text" placeholder="🔍 수취인 · 송장번호 · 주문번호 검색" style="flex:1;min-width:220px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13px">
+      <button class="btn" id="sendPickedBtn">픽업완료건 일괄 송신</button>
+      <button class="btn ghost sm" id="sendAllBtn">전체 송신</button>
+      <button class="btn ghost sm" id="unsendAllBtn">송신 해제</button>
+      <button class="btn" id="pickDownloadBtn">엑셀 다운로드</button>
+      <button class="btn ghost sm" id="pickClearBtn">초기화</button>
+      <div class="stat">
+        <div>총 <b id="pkTotal">0</b></div>
+        <div>픽업완료 <b id="pkPicked" style="color:var(--ok)">0</b></div>
+        <div>송신 <b id="pkSent" style="color:var(--accent)">0</b></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div id="pickArea"><div class="empty">파일을 올리면 목록이 표시됩니다.</div></div>
+    </div>
+  </div>
+
+  <div class="foot">모든 처리는 브라우저 안에서만 이루어집니다. 스캔·검수 상태는 이 화면에서만 관리됩니다.</div>
+</div>
+
+<!-- ================= 바코드스캔 탭 ================= -->
+<div class="wrap" id="tabScan" style="display:none">
+  <div class="scanbar">
+    <div class="scanwrap">
+      <label>송장번호 바코드 스캔 / 입력</label>
+      <input id="scanInput" type="text" placeholder="이 칸을 클릭 후 바코드를 스캔하세요 (스캔=자동 Enter)" autocomplete="off">
+    </div>
+    <div class="stat"><div>스캔 <b id="scanCnt">0</b></div><div>픽업완료 <b id="scanPicked" style="color:var(--ok)">0</b>/<b id="scanTotal">0</b></div></div>
+  </div>
+
+  <div class="card scanresult" id="scanResult">
+    <div class="empty" id="scanEmpty">먼저 [픽업검수] 탭에서 송장 파일을 올린 뒤, 여기서 송장번호를 스캔하세요.</div>
+    <div id="scanHit" style="display:none">
+      <div class="scanname" id="scanName">—</div>
+      <div class="scanurgent" id="scanUrgent"></div>
+      <div class="scanmeta" id="scanMeta"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>최근 스캔</h2>
+    <div id="scanLog"><div class="empty">스캔 기록이 여기에 표시됩니다.</div></div>
+  </div>
+  <div class="foot">바코드 스캐너는 스캔 후 자동으로 Enter를 보냅니다. 입력창에 커서만 둔 채로 계속 스캔하세요.</div>
 </div>
 
 <script>
@@ -752,6 +852,205 @@ document.getElementById("mapFile").addEventListener("change",e=>{
 });
 
 renderDrop();render();
+
+/* ================= 픽업검수 + 바코드스캔 탭 ================= */
+const SUBTXT={merge:"수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 \"웹자료올리기\" 업로드",
+  pick:"이카운트 배송처리 송장 엑셀 업로드 → 검수 목록 관리 · 송신처리",
+  scan:"송장번호를 스캔하면 수취인·물류메세지 표시 + 픽업검수 완료 처리(시간 기록)"};
+function showTab(t){
+  ["merge","pick","scan"].forEach(x=>{ document.getElementById("tab"+x[0].toUpperCase()+x.slice(1)).style.display = x===t?"":"none";
+    document.getElementById("tabBtn"+x[0].toUpperCase()+x.slice(1)).classList.toggle("on",x===t); });
+  document.getElementById("headSub").textContent=SUBTXT[t];
+  if(t==="scan") setTimeout(()=>{const s=document.getElementById("scanInput");if(s)s.focus();},50);
+}
+document.getElementById("tabBtnMerge").addEventListener("click",()=>showTab("merge"));
+document.getElementById("tabBtnPick").addEventListener("click",()=>showTab("pick"));
+document.getElementById("tabBtnScan").addEventListener("click",()=>showTab("scan"));
+
+const PSYN={
+  "송장번호":["송장번호","운송장번호","운송장","invoice","tracking"],
+  "주문번호":["주문번호","order"],
+  "수취인":["수취인","수취인명","수령인","수령인명","받는사람","인수자","고객명"],
+  "오픈마켓명":["오픈마켓명","쇼핑몰명","오픈마켓","판매처","마켓명"],
+  "상품명":["오픈마켓상품명","상품명","쇼핑몰상품명","제품명"],
+  "옵션":["주문옵션","옵션","옵션정보","규격명","단품명"],
+  "수량":["수량","주문수량","구매수량"],
+  "물류메세지":["물류 긴급 메세지","물류긴급메세지","긴급메세지","물류메세지","긴급메시지"],
+  "픽업완료":["픽업완료","픽업","픽업검수"],
+  "송신여부":["송신여부","송신"],
+  "픽업시간":["픽업검수시간","픽업시간","검수시간"],
+};
+function pguess(headers,key){
+  const H=headers.map(norm), c=PSYN[key]||[];
+  for(const x of c){ const i=H.indexOf(norm(x)); if(i>=0) return i; }
+  for(const x of c){ const nx=norm(x); const i=H.findIndex(h=>h&&h.includes(nx)); if(i>=0) return i; }
+  return -1;
+}
+const onlyDigits=s=>String(s==null?"":s).replace(/[^0-9]/g,"");
+function nowStr(){ const d=new Date(); const p=n=>String(n).padStart(2,"0");
+  return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds()); }
+
+let pkData=null; let scanLog=[];
+
+function pickHandleFile(file){
+  const rd=new FileReader();
+  rd.onload=e=>{
+    try{
+      let data=new Uint8Array(e.target.result);
+      if(xlsIsEncrypted(data, XLSX.CFB)){
+        let pw=prompt(`🔒 "${file.name}" 파일이 비밀번호로 잠겨 있습니다. 비밀번호를 입력하세요.`);
+        let done=false;
+        while(pw!=null){ try{ data=decryptXlsCFB(data,pw,XLSX.CFB); done=true; break; }
+          catch(err){ if(err&&err.code==="badPassword") pw=prompt("❌ 비밀번호 불일치. 다시 입력해주세요."); else { alert("지원하지 않는 암호화입니다."); return; } } }
+        if(!done) return;
+      }
+      const wb=XLSX.read(data,{type:"array"});
+      const aoa=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:"",raw:false});
+      if(!aoa.length){alert("빈 파일입니다.");return;}
+      let hr=0,bs=-1;
+      for(let r=0;r<Math.min(aoa.length,15);r++){const H=(aoa[r]||[]).map(norm);let s=0;for(const k in PSYN){for(const c of PSYN[k]){if(H.includes(norm(c))){s++;break;}}}if(s>bs){bs=s;hr=r;}}
+      const headers=(aoa[hr]||[]).map(h=>String(h).trim());
+      const idx={}; for(const k in PSYN) idx[k]=pguess(headers,k);
+      if(idx["송장번호"]<0){ alert("송장번호 컬럼을 찾지 못했습니다."); return; }
+      const raw=aoa.slice(hr+1).filter(r=>r.some(c=>String(c).trim()!==""));
+      const g=(r,k)=> idx[k]>=0?String(r[idx[k]]??"").trim():"";
+      const rows=raw.map(r=>({ cells:r.slice(),
+        송장:g(r,"송장번호"), 주문:g(r,"주문번호"), 수취인:g(r,"수취인"), 오픈마켓:g(r,"오픈마켓명"),
+        상품:g(r,"상품명"), 옵션:g(r,"옵션"), 수량:g(r,"수량"), msg:g(r,"물류메세지"),
+        picked:false, sent:false, pickedAt:"" }));
+      pkData={headers, idx, rows};
+      document.getElementById("pickPanel").style.display="";
+      document.getElementById("pickDropHint").textContent=`✓ ${file.name} — ${rows.length}건`;
+      renderPick(); pickStat();
+    }catch(err){ alert("파일을 읽지 못했습니다: "+err.message); }
+  };
+  rd.readAsArrayBuffer(file);
+}
+(function(){
+  const d=document.getElementById("pickDrop");
+  d.addEventListener("click",()=>{const i=document.createElement("input");i.type="file";i.accept=".xlsx,.xls";i.onchange=e=>{if(e.target.files[0])pickHandleFile(e.target.files[0]);};i.click();});
+  d.addEventListener("dragover",e=>{e.preventDefault();d.classList.add("drag");});
+  d.addEventListener("dragleave",()=>d.classList.remove("drag"));
+  d.addEventListener("drop",e=>{e.preventDefault();d.classList.remove("drag");if(e.dataTransfer.files[0])pickHandleFile(e.dataTransfer.files[0]);});
+})();
+
+function pickStat(){
+  if(!pkData) return;
+  const picked=pkData.rows.filter(r=>r.picked).length;
+  document.getElementById("pkTotal").textContent=pkData.rows.length;
+  document.getElementById("pkPicked").textContent=picked;
+  document.getElementById("pkSent").textContent=pkData.rows.filter(r=>r.sent).length;
+  const st=document.getElementById("scanTotal"), sp=document.getElementById("scanPicked");
+  if(st) st.textContent=pkData.rows.length; if(sp) sp.textContent=picked;
+}
+function renderPick(){
+  const area=document.getElementById("pickArea");
+  if(!pkData||!pkData.rows.length){area.innerHTML=`<div class="empty">파일을 올리면 목록이 표시됩니다.</div>`;return;}
+  const q=norm(document.getElementById("pickSearch").value||""); const qd=onlyDigits(q);
+  const rows=pkData.rows.map((r,i)=>({r,i})).filter(({r})=> !q || norm(r.수취인).includes(q)||(qd&&onlyDigits(r.송장).includes(qd))||norm(r.주문).includes(q));
+  let h=`<div class="tblwrap"><table><thead><tr>
+    <th>상태</th><th>픽업검수시간</th><th>수취인</th><th>송장번호</th><th>주문번호</th><th>오픈마켓</th><th>상품명</th><th>옵션</th><th>수량</th><th>물류 긴급 메세지</th><th>송신</th></tr></thead><tbody>`;
+  h+=rows.map(({r,i})=>`<tr data-ri="${i}" class="${r.sent?'sent':r.picked?'picked':''}">
+    <td>${r.picked?'<span class="pill done">픽업검수 완료</span>':'<span class="pill wait">대기</span>'}</td>
+    <td class="t">${r.pickedAt||''}</td>
+    <td>${r.수취인||''}</td><td>${r.송장||''}</td><td>${r.주문||''}</td><td>${r.오픈마켓||''}</td>
+    <td>${(r.상품||'').slice(0,28)}</td><td>${(r.옵션||'').slice(0,20)}</td><td>${r.수량||''}</td>
+    <td><input class="msgin" data-msg="${i}" value="${(r.msg||'').replace(/"/g,'&quot;')}" placeholder="긴급메세지"></td>
+    <td style="text-align:center"><input type="checkbox" class="chk" data-sent="${i}" ${r.sent?'checked':''}> ${r.sent?'<span class="pill sent">송신</span>':''}</td>
+  </tr>`).join("");
+  h+=`</tbody></table></div><div class="rowcount">${rows.length} / 전체 ${pkData.rows.length}건 표시</div>`;
+  area.innerHTML=h;
+  area.querySelectorAll("[data-msg]").forEach(inp=>inp.addEventListener("input",e=>{pkData.rows[+e.target.dataset.msg].msg=e.target.value;}));
+  area.querySelectorAll("[data-sent]").forEach(c=>c.addEventListener("change",e=>{pkData.rows[+e.target.dataset.sent].sent=e.target.checked;pickStat();renderPick();}));
+}
+document.getElementById("pickSearch").addEventListener("input",renderPick);
+document.getElementById("sendPickedBtn").addEventListener("click",()=>{ if(!pkData)return; let n=0; pkData.rows.forEach(r=>{if(r.picked&&!r.sent){r.sent=true;n++;}}); renderPick();pickStat(); alert(`픽업완료건 ${n}건을 송신 처리했습니다.`); });
+document.getElementById("sendAllBtn").addEventListener("click",()=>{ if(!pkData)return; if(!confirm("전체 주문을 송신 상태로 바꿀까요?"))return; pkData.rows.forEach(r=>r.sent=true); renderPick();pickStat(); });
+document.getElementById("unsendAllBtn").addEventListener("click",()=>{ if(!pkData)return; pkData.rows.forEach(r=>r.sent=false); renderPick();pickStat(); });
+document.getElementById("pickClearBtn").addEventListener("click",()=>{ if(!confirm("픽업검수 목록을 초기화할까요?"))return; pkData=null;scanLog=[]; document.getElementById("pickPanel").style.display="none"; document.getElementById("pickDropHint").textContent="업로드하면 아래에 픽업검수 목록이 뜹니다"; renderScanUI(); });
+
+document.getElementById("pickDownloadBtn").addEventListener("click",()=>{
+  if(!pkData||!pkData.rows.length)return;
+  const H=pkData.headers.slice(), idx=Object.assign({},pkData.idx);
+  function ensure(key,label){ if(idx[key]<0){ idx[key]=H.length; H.push(label); } }
+  ensure("픽업완료","픽업검수"); ensure("픽업시간","픽업검수시간"); ensure("송신여부","송신여부"); ensure("물류메세지","물류 긴급 메세지");
+  const aoa=[H];
+  pkData.rows.forEach(r=>{ const row=r.cells.slice(); while(row.length<H.length) row.push("");
+    row[idx["픽업완료"]]=r.picked?"픽업검수 완료":""; row[idx["픽업시간"]]=r.pickedAt||"";
+    row[idx["송신여부"]]=r.sent?"송신":""; row[idx["물류메세지"]]=r.msg||""; aoa.push(row); });
+  const ws=XLSX.utils.aoa_to_sheet(aoa); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"픽업검수");
+  const d=new Date(); const ymd=d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0");
+  XLSX.writeFile(wb,`${ymd}_픽업검수.xlsx`);
+});
+
+/* ---- 바코드스캔 ---- */
+function renderScanUI(){
+  const has=pkData&&pkData.rows.length;
+  document.getElementById("scanEmpty").style.display=has?"none":"";
+  document.getElementById("scanCnt").textContent=scanLog.length;
+  pickStat();
+  const logEl=document.getElementById("scanLog");
+  if(!scanLog.length){ logEl.innerHTML=`<div class="empty">스캔 기록이 여기에 표시됩니다.</div>`; return; }
+  logEl.innerHTML=scanLog.slice(0,40).map(l=>`<div class="logrow"><span class="t">${l.t}</span><span class="${l.ok?'ok':'er'}">${l.ok?'✓':'✗'}</span><span>${l.text}</span></div>`).join("");
+}
+function scanResult(hit, rec, extra){
+  const box=document.getElementById("scanResult");
+  document.getElementById("scanHit").style.display=hit?"":"none";
+  document.getElementById("scanEmpty").style.display=hit?"none":(pkData&&pkData.rows.length?"none":"");
+  box.classList.toggle("hit",hit); box.classList.toggle("miss",!hit);
+  if(hit){
+    document.getElementById("scanName").textContent=rec.수취인||"(수취인 미상)";
+    const u=document.getElementById("scanUrgent"); u.textContent=rec.msg?("🚨 "+rec.msg):"";
+    document.getElementById("scanMeta").innerHTML=`송장 ${rec.송장} · 주문 ${rec.주문||'-'} · ${rec.오픈마켓||''} · ${rec.수량||''}개 <br>픽업검수 완료 ${rec.pickedAt}`;
+  }else{
+    document.getElementById("scanHit").style.display="";
+    document.getElementById("scanEmpty").style.display="none";
+    document.getElementById("scanName").textContent="일치 없음";
+    document.getElementById("scanUrgent").textContent="";
+    document.getElementById("scanMeta").textContent=extra||"";
+  }
+}
+function doScan(v){
+  const val=String(v||"").trim(); if(!val) return;
+  if(!pkData){ scanResult(false,null,"먼저 픽업검수 탭에서 송장 파일을 올려주세요."); return; }
+  const dv=onlyDigits(val);
+  const hits=pkData.rows.filter(r=> r.송장 && (r.송장===val || (dv&&onlyDigits(r.송장)===dv)));
+  const t=nowStr();
+  if(hits.length){
+    hits.forEach(r=>{ r.picked=true; if(!r.pickedAt) r.pickedAt=t; });
+    scanResult(true, hits[0]);
+    scanLog.unshift({t:t.slice(11), ok:true, text:`${hits[0].수취인||''} · ${val}`});
+    renderPick(); renderScanUI();
+    const tr=document.querySelector(`#pickArea tr[data-ri="${pkData.rows.indexOf(hits[0])}"]`);
+    if(tr){ tr.classList.remove("flash"); void tr.offsetWidth; tr.classList.add("flash"); }
+  }else{
+    scanResult(false,null,`일치하는 송장번호가 없습니다: ${val}`);
+    scanLog.unshift({t:t.slice(11), ok:false, text:`미매칭 · ${val}`});
+    renderScanUI();
+  }
+}
+document.getElementById("scanInput").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); doScan(e.target.value); e.target.value=""; e.target.focus(); } });
+
+/* ================= 접속 암호 게이트 ================= */
+(function(){
+  const PW_HASH="ee9fe2c4465c17c7662cdcc5734d58894a3e568d4f77b07eb235703a84daf44e"; // 기본암호 해시
+  const gate=document.getElementById("gate"), inp=document.getElementById("gatePw"),
+        err=document.getElementById("gateErr"), btn=document.getElementById("gateBtn");
+  // 이번 세션에서 이미 통과했으면 스킵
+  try{ if(sessionStorage.getItem("rf_ok")==="1"){ gate.style.display="none"; return; } }catch(_){}
+  async function sha256hex(str){
+    const buf=await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+    return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
+  }
+  async function tryPw(){
+    const h=await sha256hex(inp.value);
+    if(h===PW_HASH){ try{sessionStorage.setItem("rf_ok","1");}catch(_){} gate.style.display="none"; }
+    else{ err.textContent="암호가 일치하지 않습니다."; inp.value=""; inp.focus(); }
+  }
+  btn.addEventListener("click",tryPw);
+  inp.addEventListener("keydown",e=>{ if(e.key==="Enter") tryPw(); });
+  setTimeout(()=>inp.focus(),100);
+})();
 </script>
 </body>
 </html>
