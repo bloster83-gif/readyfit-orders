@@ -233,7 +233,7 @@ global.decryptXlsCFB=decryptXlsCFB;
   header{padding:20px 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
   header h1{font-size:18px;margin:0;font-weight:700}
   header .sub{color:var(--dim);font-size:12.5px;margin-top:3px}
-  .wrap{max-width:1200px;margin:0 auto;padding:24px}
+  .wrap{max-width:none;margin:0 auto;padding:24px 30px}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
   @media(max-width:820px){.grid{grid-template-columns:1fr}}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
@@ -253,12 +253,14 @@ global.decryptXlsCFB=decryptXlsCFB;
   .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
   .btn.ghost:hover{border-color:var(--accent)}
   .btn.sm{padding:6px 11px;font-size:12px}
+  .btn.xs{padding:4px 8px;font-size:11.5px}
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:18px 0}
   .stat{display:flex;gap:16px;flex-wrap:wrap;margin-left:auto;color:var(--dim);font-size:12.5px}
   .stat b{color:var(--txt)}
   table{width:100%;border-collapse:collapse;font-size:12px}
   .tblwrap{overflow:auto;max-height:430px;border:1px solid var(--line);border-radius:10px;margin-top:6px}
-  th,td{padding:7px 9px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line)}
+  th,td{padding:7px 6px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line)}
+  td.ell{max-width:190px;overflow:hidden;text-overflow:ellipsis}
   th{background:var(--panel2);position:sticky;top:0;font-weight:600;color:var(--dim);z-index:1}
   tr:hover td{background:#1a1f29}
   td.bad{color:var(--err)}
@@ -288,21 +290,30 @@ global.decryptXlsCFB=decryptXlsCFB;
   tr.urgent td, tr.urgent td input.msgin{color:var(--err)!important;font-weight:700}
   .fbtn{background:var(--bg);color:var(--dim);border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-size:12.5px;font-weight:700;cursor:pointer;transition:.15s}
   .fbtn:hover{border-color:var(--accent);color:var(--txt)}
-  .fbtn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .fbtn.on{background:var(--bg);border-color:var(--accent);color:var(--accent);font-weight:800}
   tr.flash td{animation:flash .8s}
   @keyframes flash{0%{background:#2c7a4d!important}100%{}}
   .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700}
   .pill.done{background:#1c4a30;color:#5fe0a0} .pill.wait{background:#3a2417;color:#f5a56b}
   .pill.sent{background:#1e3a5f;color:#8fc0ff}
-  td .msgin{width:150px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:4px 7px;font-size:12px}
+  td .msgin{width:120px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:4px 7px;font-size:12px}
   td .chk{width:17px;height:17px;cursor:pointer;accent-color:var(--accent)}
   .scanresult{min-height:230px;display:flex;align-items:center;justify-content:center;text-align:center}
   .scanname{font-size:58px;font-weight:800;color:var(--txt);letter-spacing:1px}
   .scanurgent{margin-top:14px;font-size:36px;font-weight:800;color:var(--warn);min-height:30px;background:#3a2a10;border-radius:12px;padding:6px 14px;display:inline-block}
   .scanurgent:empty{display:none}
-  .scanmeta{margin-top:10px;color:var(--dim);font-size:14px}
+  .scanmeta{margin-top:12px;color:var(--dim);font-size:14px;text-align:center}
   .scanresult.hit{border-color:var(--ok);box-shadow:0 0 0 2px rgba(57,192,122,.25)}
   .scanresult.miss{border-color:var(--err);box-shadow:0 0 0 2px rgba(255,92,108,.25)}
+  .scanresult.pend{border-color:var(--warn);box-shadow:0 0 0 3px rgba(245,166,35,.35)}
+  .scangrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;text-align:left}
+  .scell{background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:0}
+  .scell label{display:block;font-size:13px;color:var(--dim);font-weight:700;margin-bottom:6px}
+  .scell .v{font-size:24px;font-weight:800;word-break:break-all}
+  .scell.sbig .v{font-size:46px;line-height:1.15}
+  .scell.span2{grid-column:span 2}
+  .scell.warnc{border-color:var(--warn);background:#3a2a10}
+  .scell.warnc .v{color:var(--warn);font-size:34px}
   .logrow{display:flex;gap:12px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line);font-size:13px}
   .logrow .t{color:var(--dim);font-variant-numeric:tabular-nums}
   .logrow .ok{color:var(--ok);font-weight:700} .logrow .er{color:var(--err);font-weight:700}
@@ -311,12 +322,12 @@ global.decryptXlsCFB=decryptXlsCFB;
   /* 픽업검수 틀고정 (수취인까지) */
   th.fz,td.fz{position:sticky;z-index:2;background:var(--panel)}
   th.fz{background:var(--panel2)!important;z-index:3}
-  .fz0{left:0;min-width:36px;width:36px;max-width:36px}
-  .fz1{left:36px;min-width:96px;width:96px;max-width:96px}
-  .fz2{left:132px;min-width:96px;width:96px;max-width:96px}
-  .fz3{left:228px;min-width:124px;width:124px;max-width:124px}
-  .fz4{left:352px;min-width:160px;width:160px;max-width:160px}
-  .fz5{left:512px;min-width:92px;width:92px;max-width:120px;overflow:hidden;text-overflow:ellipsis;border-right:2px solid var(--line)}
+  .fz0{left:0;min-width:32px;width:32px;max-width:32px}
+  .fz1{left:32px;min-width:84px;width:84px;max-width:84px}
+  .fz2{left:116px;min-width:84px;width:84px;max-width:84px}
+  .fz3{left:200px;min-width:104px;width:104px;max-width:104px}
+  .fz4{left:304px;min-width:122px;width:122px;max-width:122px}
+  .fz5{left:426px;min-width:80px;width:80px;max-width:104px;overflow:hidden;text-overflow:ellipsis;border-right:2px solid var(--line)}
   button.hasmemo{background:var(--warn)!important;color:#1a1408!important;border-color:var(--warn)!important;font-weight:800}
   table.seltable{user-select:none}
   td.sel{background:#274b7d!important;outline:1px solid var(--accent)}
@@ -335,7 +346,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v3.9</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v4.0</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -382,7 +393,7 @@ global.decryptXlsCFB=decryptXlsCFB;
   <div id="pickPanel">
     <div class="toolbar">
       <button class="btn" id="uploadBtn">＋ 주문 업로드</button>
-      <input id="pickSearch" type="text" placeholder="🔍 수취인 · 송장번호 · 주문번호 검색 (전체 기간)" style="flex:1;min-width:220px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13px">
+      <input id="pickSearch" type="text" placeholder="🔍 수취인 · 송장 · 주문번호 · 날짜(0729) 검색" style="flex:1;min-width:220px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13px">
       <button class="fbtn" data-pf="unsent">미송신만</button>
       <button class="fbtn" data-pf="picked">픽업검수만</button>
       <button class="fbtn" data-pf="memo">메모만</button>
@@ -433,7 +444,7 @@ global.decryptXlsCFB=decryptXlsCFB;
     </div>
     <div class="pastebox" id="pasteBox" tabindex="0">📋 또는 엑셀에서 표를 복사(Ctrl+C)한 뒤, 이 상자를 클릭하고 <b>Ctrl+V</b>로 붙여넣기</div>
     <div class="desc" style="margin-top:10px">
-      양식: 헤더 자동 인식 — <b>송장번호</b>(필수) · 수취인 · 주문번호 · 오픈마켓명 · 상품명 · 옵션 · 수량 · 물류 긴급 메세지.
+      양식: 헤더 자동 인식 — <b>송장번호</b>(필수) · 수취인 · 주문번호 · 주문사이트 · 상품명 · 옵션 · 수량 · 물류 긴급 메세지.
       헤더 없이 붙여넣으면 1열=송장번호, 2열=수취인, 3열=물류 긴급 메세지.
     </div>
     <button class="btn ghost sm" id="uploadClose" style="margin-top:12px;width:100%">닫기</button>
@@ -466,10 +477,21 @@ global.decryptXlsCFB=decryptXlsCFB;
 
   <div class="card scanresult" id="scanResult">
     <div class="empty" id="scanEmpty">먼저 [픽업검수] 탭에서 송장 파일을 올린 뒤, 여기서 송장번호를 스캔하세요.</div>
-    <div id="scanHit" style="display:none">
-      <div class="scanname" id="scanName">—</div>
-      <div class="scanurgent" id="scanUrgent"></div>
+    <div id="scanHit" style="display:none;width:100%">
+      <div class="scangrid">
+        <div class="scell sbig"><label>수취인</label><div class="v" id="scanName">—</div></div>
+        <div class="scell sbig"><label>수량</label><div class="v" id="scanQty">—</div></div>
+        <div class="scell warnc span2" id="scanMsgCell" style="display:none"><label>🚨 물류 긴급 메세지</label><div class="v" id="scanUrgent"></div></div>
+        <div class="scell span2"><label>상품명</label><div class="v" id="scanProd">—</div></div>
+        <div class="scell"><label>옵션</label><div class="v" id="scanOpt">—</div></div>
+        <div class="scell"><label>주문사이트</label><div class="v" id="scanMall">—</div></div>
+      </div>
       <div class="scanmeta" id="scanMeta"></div>
+      <div id="scanConfirm" style="display:none;margin-top:20px">
+        <div style="font-size:17px;font-weight:800;color:var(--warn);margin-bottom:12px">⚠️ 물류 메세지를 확인한 후 선택하세요</div>
+        <button class="btn" id="scanOkBtn" style="background:var(--ok);font-size:21px;padding:16px 30px;border-radius:14px">✅ 픽업검수 완료</button>
+        <button class="btn" id="scanNoBtn" style="background:var(--err);font-size:21px;padding:16px 30px;border-radius:14px;margin-left:10px">✋ 검수 보류</button>
+      </div>
     </div>
   </div>
 
@@ -991,7 +1013,7 @@ const PSYN={
   "주문일자":["주문일자","주문일","결제일자","주문접수일자","주문일시"],
   "주문번호":["주문번호","order"],
   "수취인":["수취인","수취인명","수령인","수령인명","받는사람","인수자","고객명"],
-  "오픈마켓명":["오픈마켓명","쇼핑몰명","오픈마켓","판매처","마켓명"],
+  "오픈마켓명":["오픈마켓명","쇼핑몰명","오픈마켓","판매처","마켓명","주문사이트","사이트명"],
   "상품명":["오픈마켓상품명","상품명","쇼핑몰상품명","제품명"],
   "옵션":["주문옵션","옵션","옵션정보","규격명","단품명"],
   "수량":["수량","주문수량","구매수량"],
@@ -1241,12 +1263,12 @@ function renderPick(){
     if(pf==="picked" && !r.picked) return false;
     if(pf==="memo" && !(r.memos&&r.memos.length)) return false;
     if(pf==="msg" && !(r.msg&&String(r.msg).trim())) return false;
-    if(q) return norm(r.수취인).includes(q)||(qd&&onlyDigits(r.송장).includes(qd))||norm(r.주문).includes(q);
+    if(q) return norm(r.수취인).includes(q)||(qd&&onlyDigits(r.송장).includes(qd))||norm(r.주문).includes(q)||(qd&&qd.length>=3&&(onlyDigits(r.added||"").includes(qd)||onlyDigits(r.주문일자||"").includes(qd)));
     if(pf) return true;
     return (r.added||todayStr())>=cut;
   });
   let h=`<div class="tblwrap"><table><thead><tr>
-    <th class="fz fz0"><input type="checkbox" class="chk" id="selAllChk" title="전체선택"></th><th class="fz fz1">업로드일자</th><th class="fz fz2">주문일자</th><th class="fz fz3">상태</th><th class="fz fz4">픽업검수시간</th><th class="fz fz5">수취인</th><th>송장번호</th><th>주문번호</th><th>오픈마켓</th><th>상품명</th><th>옵션</th><th>수량</th><th>물류 긴급 메세지</th><th>송신</th><th>세부</th></tr></thead><tbody>`;
+    <th class="fz fz0"><input type="checkbox" class="chk" id="selAllChk" title="전체선택"></th><th class="fz fz1">업로드일자</th><th class="fz fz2">주문일자</th><th class="fz fz3">상태</th><th class="fz fz4">픽업검수시간</th><th class="fz fz5">수취인</th><th>송장번호</th><th>주문번호</th><th>주문사이트</th><th>상품명</th><th>옵션</th><th>수량</th><th>물류 긴급 메세지</th><th>송신</th><th>세부</th></tr></thead><tbody>`;
   h+=rows.map(({r,i})=>`<tr data-ri="${i}" class="${r.sent?'sent':r.picked?'picked':''}${r.msg&&String(r.msg).trim()?' urgent':''}">
     <td class="fz fz0" style="text-align:center"><input type="checkbox" class="chk selDel" data-del="${i}"></td>
     <td class="fz fz1 t">${r.added||''}</td>
@@ -1254,10 +1276,10 @@ function renderPick(){
     <td class="fz fz3">${r.picked?'<span class="pill done">픽업검수 완료</span>':'<span class="pill wait">대기</span>'}</td>
     <td class="fz fz4 t">${r.pickedAt||''}</td>
     <td class="fz fz5">${r.수취인||''}</td><td>${r.송장||''}</td><td>${r.주문||''}</td><td>${r.오픈마켓||''}</td>
-    <td>${(r.상품||'').slice(0,28)}</td><td>${(r.옵션||'').slice(0,20)}</td><td>${r.수량||''}</td>
+    <td class="ell" title="${(r.상품||'').replace(/"/g,'&quot;')}">${r.상품||''}</td><td class="ell" style="max-width:120px" title="${(r.옵션||'').replace(/"/g,'&quot;')}">${r.옵션||''}</td><td>${r.수량||''}</td>
     <td><input class="msgin" data-msg="${i}" value="${(r.msg||'').replace(/"/g,'&quot;')}" placeholder="긴급메세지"></td>
     <td style="text-align:center"><input type="checkbox" class="chk" data-sent="${i}" ${r.sent?'checked':''}> ${r.sent?'<span class="pill sent">송신</span>':''}</td>
-    <td style="white-space:nowrap"><button class="btn ghost sm" data-detail="${i}">세부정보</button> <button class="btn ghost sm ${r.memos&&r.memos.length?'hasmemo':''}" data-memo="${i}">CS메모${r.memos&&r.memos.length?`(${r.memos.length})`:''}</button></td>
+    <td style="white-space:nowrap"><button class="btn ghost sm xs" data-detail="${i}">세부</button> <button class="btn ghost sm xs ${r.memos&&r.memos.length?'hasmemo':''}" data-memo="${i}">메모${r.memos&&r.memos.length?`(${r.memos.length})`:''}</button></td>
   </tr>`).join("");
   const pfName={unsent:"미송신",picked:"픽업검수 완료",memo:"메모 있음",msg:"물류메세지 있음"}[pf];
   h+=`</tbody></table></div><div class="rowcount">${rows.length}건 표시 · 누적 ${pkData.rows.length}건 ${q?"(전체 기간 검색결과)":pf?`(전체 기간 · ${pfName}만)`:"(최근 7일 — 이전 주문은 검색으로 조회)"}</div>`;
@@ -1295,7 +1317,7 @@ document.getElementById("pickDownloadBtn").addEventListener("click",()=>{
 
 /* ---- 주문 수정/삭제 모달 ---- */
 let editIdx=-1;
-const EDIT_FIELDS=[["주문일자","주문일자"],["수취인","수취인"],["송장","송장번호"],["주문","주문번호"],["오픈마켓","오픈마켓"],["상품","상품명"],["옵션","옵션"],["수량","수량"],["msg","물류 긴급 메세지"]];
+const EDIT_FIELDS=[["주문일자","주문일자"],["수취인","수취인"],["송장","송장번호"],["주문","주문번호"],["오픈마켓","주문사이트"],["상품","상품명"],["옵션","옵션"],["수량","수량"],["msg","물류 긴급 메세지"]];
 function openEdit(i){
   if(!pkData||!pkData.rows[i]) return;
   editIdx=i; const r=pkData.rows[i];
@@ -1384,19 +1406,32 @@ function renderScanUI(){
     speak("픽업검수 취소");
   }));
 }
-function scanResult(hit, rec, extra){
+function scanResult(hit, rec, extra, pending){
   const box=document.getElementById("scanResult");
   document.getElementById("scanHit").style.display=hit?"":"none";
   document.getElementById("scanEmpty").style.display=hit?"none":(pkData&&pkData.rows.length?"none":"");
-  box.classList.toggle("hit",hit); box.classList.toggle("miss",!hit);
+  box.classList.toggle("hit",hit&&!pending); box.classList.toggle("miss",!hit);
+  box.classList.toggle("pend",!!pending);
+  document.getElementById("scanConfirm").style.display=pending?"":"none";
   if(hit){
     document.getElementById("scanName").textContent=rec.수취인||"(수취인 미상)";
-    const u=document.getElementById("scanUrgent"); u.textContent=rec.msg?("🚨 "+rec.msg):"";
-    document.getElementById("scanMeta").innerHTML=`송장 ${rec.송장} · 주문 ${rec.주문||'-'} · ${rec.오픈마켓||''} · ${rec.수량||''}개 <br>픽업검수 완료 ${rec.pickedAt}`;
+    document.getElementById("scanQty").textContent=(rec.수량||"-")+"개";
+    document.getElementById("scanProd").textContent=rec.상품||"-";
+    document.getElementById("scanOpt").textContent=rec.옵션||"-";
+    document.getElementById("scanMall").textContent=rec.오픈마켓||"-";
+    const hasMsg=rec.msg&&String(rec.msg).trim();
+    document.getElementById("scanMsgCell").style.display=hasMsg?"":"none";
+    document.getElementById("scanUrgent").textContent=hasMsg?rec.msg:"";
+    document.getElementById("scanMeta").innerHTML=`송장 ${rec.송장} · 주문 ${rec.주문||'-'} <br>${pending?'<b style="color:var(--warn)">픽업검수 대기 — 아래 버튼으로 선택</b>':'픽업검수 완료 '+(rec.pickedAt||'')}`;
   }else{
     document.getElementById("scanHit").style.display="";
     document.getElementById("scanEmpty").style.display="none";
     document.getElementById("scanName").textContent="일치 없음";
+    document.getElementById("scanQty").textContent="-";
+    document.getElementById("scanProd").textContent="-";
+    document.getElementById("scanOpt").textContent="-";
+    document.getElementById("scanMall").textContent="-";
+    document.getElementById("scanMsgCell").style.display="none";
     document.getElementById("scanUrgent").textContent="";
     document.getElementById("scanMeta").textContent=extra||"";
   }
@@ -1423,12 +1458,43 @@ function speak(txt){
     speechSynthesis.speak(u);
   }catch(_){}
 }
+let pendingScan=null;
+function resolvePending(ok){
+  if(!pendingScan) return;
+  const {hits,val}=pendingScan; pendingScan=null;
+  document.getElementById("scanConfirm").style.display="none";
+  document.getElementById("scanResult").classList.remove("pend");
+  const t=nowStr();
+  const nm=(hits[0].수취인||"").replace(/\(.*?\)/g,"").trim();
+  if(ok){
+    hits.forEach(r=>{ r.picked=true; if(!r.pickedAt) r.pickedAt=t; }); savePk();
+    scanResult(true, hits[0]);
+    scanLog.unshift({d:todayStr(), t:t.slice(11), ok:true, text:`${hits[0].수취인||''} · ${val}`, inv:hits[0].송장});
+    renderPick(); renderScanUI();
+    speak(nm+" 픽업완료");
+  }else{
+    scanLog.unshift({d:todayStr(), t:t.slice(11), ok:false, text:`보류(물류메세지) · ${hits[0].수취인||''} · ${val}`});
+    renderScanUI();
+    document.getElementById("scanMeta").innerHTML=`송장 ${hits[0].송장} · 주문 ${hits[0].주문||'-'} <br><b style="color:var(--err)">픽업검수 보류됨 (미완료)</b>`;
+    speak("검수 보류");
+  }
+  const si=document.getElementById("scanInput"); if(si) si.focus();
+}
 function doScan(v){
   const val=String(v||"").trim(); if(!val) return;
   if(!pkData){ scanResult(false,null,"먼저 픽업검수 탭에서 송장 파일을 올려주세요."); return; }
+  if(pendingScan) resolvePending(false); // 이전 확인 대기 건은 보류 처리
   const dv=onlyDigits(val);
   const hits=pkData.rows.filter(r=> r.송장 && (r.송장===val || (dv&&onlyDigits(r.송장)===dv)));
   const t=nowStr();
+  if(hits.length && hits[0].msg && String(hits[0].msg).trim() && !hits[0].picked){
+    // 물류메세지가 있는 주문: 바로 픽업완료하지 않고 메세지 확인 후 선택
+    pendingScan={hits, val};
+    scanResult(true, hits[0], null, true);
+    const nm=(hits[0].수취인||"").replace(/\(.*?\)/g,"").trim();
+    speak(nm+". 물류 메세지 확인. "+String(hits[0].msg).trim()+". 픽업검수 여부를 선택하세요");
+    return;
+  }
   if(hits.length){
     hits.forEach(r=>{ r.picked=true; if(!r.pickedAt) r.pickedAt=t; }); savePk();
     scanResult(true, hits[0]);
@@ -1447,6 +1513,8 @@ function doScan(v){
   }
 }
 document.getElementById("scanInput").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); doScan(e.target.value); e.target.value=""; e.target.focus(); } });
+document.getElementById("scanOkBtn").addEventListener("click",()=>resolvePending(true));
+document.getElementById("scanNoBtn").addEventListener("click",()=>resolvePending(false));
 
 /* ================= 접속 암호 게이트 ================= */
 (function(){
