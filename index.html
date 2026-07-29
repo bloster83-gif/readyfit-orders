@@ -291,6 +291,11 @@ global.decryptXlsCFB=decryptXlsCFB;
   .fbtn{background:var(--bg);color:var(--dim);border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-size:12.5px;font-weight:700;cursor:pointer;transition:.15s}
   .fbtn:hover{border-color:var(--accent);color:var(--txt)}
   .fbtn.on{background:var(--bg);border-color:var(--accent);color:var(--accent);font-weight:800}
+  .pillbtn{background:transparent;border-radius:999px;padding:8px 16px;font-size:12.5px;font-weight:800;cursor:pointer;transition:.15s}
+  .pillbtn.blue{border:2px solid var(--accent);color:var(--accent)}
+  .pillbtn.blue:hover{background:rgba(79,140,255,.12)}
+  .pillbtn.orange{border:2px solid var(--warn);color:var(--warn)}
+  .pillbtn.orange:hover{background:rgba(245,166,35,.12)}
   tr.flash td{animation:flash .8s}
   @keyframes flash{0%{background:#2c7a4d!important}100%{}}
   .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700}
@@ -346,7 +351,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v4.0</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v4.1</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -399,8 +404,8 @@ global.decryptXlsCFB=decryptXlsCFB;
       <button class="fbtn" data-pf="memo">메모만</button>
       <button class="fbtn" data-pf="msg">물류메세지만</button>
       <button class="btn" id="sendPickedBtn">픽업완료건 일괄 송신</button>
-      <button class="btn ghost sm" id="sendAllBtn">전체 송신</button>
-      <button class="btn ghost sm" id="unsendAllBtn">송신 해제</button>
+      <button class="pillbtn blue" id="sendAllBtn">📤 전체 송신</button>
+      <button class="pillbtn orange" id="unsendAllBtn">↩ 송신 해제</button>
       <button class="btn" id="pickDownloadBtn">엑셀 다운로드</button>
       <button class="btn ghost sm" id="delSelBtn" style="color:var(--err);border-color:var(--err)">선택 삭제</button>
       <button class="btn ghost sm" id="syncCfgBtn">서버 연동</button>
