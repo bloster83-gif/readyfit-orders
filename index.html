@@ -353,7 +353,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v4.5</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v4.6</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -406,10 +406,8 @@ global.decryptXlsCFB=decryptXlsCFB;
       <button class="fbtn" data-pf="picked">픽업검수만</button>
       <button class="fbtn" data-pf="memo">메모만</button>
       <button class="fbtn" data-pf="msg">물류메세지만</button>
-      <button class="btn" id="sendPickedBtn">픽업완료건 일괄 송신</button>
       <button class="pillbtn blue" id="sendAllBtn">📤 선택주문 송신</button>
       <button class="pillbtn orange" id="unsendAllBtn">↩ 선택 송신해제</button>
-      <button class="btn" id="pickDownloadBtn">엑셀 다운로드</button>
       <button class="btn ghost sm" id="delSelBtn" style="color:var(--err);border-color:var(--err)">선택 삭제</button>
       <button class="btn ghost sm" id="syncCfgBtn">서버 연동</button>
       <span id="syncState" style="font-size:11.5px;color:var(--dim)"></span>
@@ -418,6 +416,7 @@ global.decryptXlsCFB=decryptXlsCFB;
         <div>픽업완료 <b id="pkPicked" style="color:var(--ok)">0</b></div>
         <div>송신 <b id="pkSent" style="color:var(--accent)">0</b></div>
       </div>
+      <button class="btn" id="pickDownloadBtn" style="margin-left:auto">엑셀 다운로드</button>
     </div>
 
     <div class="card">
@@ -1043,7 +1042,7 @@ const onlyDigits=s=>String(s==null?"":s).replace(/[^0-9]/g,"");
 function nowStr(){ const d=new Date(); const p=n=>String(n).padStart(2,"0");
   return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds()); }
 
-let pkData=null; let scanLog=[]; let pkFilter=null;
+let pkData=null; let scanLog=[]; let pkFilters=new Set();
 const PK_KEY="rf_pick_v1", SYNC_KEY="rf_sync_url";
 let syncUrl=""; try{ syncUrl=localStorage.getItem(SYNC_KEY)||""; }catch(_){}
 function todayStr(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
@@ -1268,22 +1267,22 @@ function renderPick(){
   if(!pkData||!pkData.rows.length){area.innerHTML=`<div class="empty">아직 주문이 없습니다. 왼쪽 위 [＋ 주문 업로드]로 송장 파일을 올려주세요.</div>`;return;}
   const q=norm(document.getElementById("pickSearch").value||""); const qd=onlyDigits(q);
   const cut=(()=>{const d=new Date();d.setDate(d.getDate()-6);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");})();
-  const pf=pkFilter;
+  const pf=pkFilters;
   const n1=onlyDigits((document.getElementById("pickFrom")||{}).value||"").slice(0,8);
   const n2=onlyDigits((document.getElementById("pickTo")||{}).value||"").slice(0,8);
   const hasRange=!!(n1||n2);
   const rows=pkData.rows.map((r,i)=>({r,i})).filter(({r})=>{
-    if(pf==="unsent" && r.sent) return false;
-    if(pf==="picked" && !r.picked) return false;
-    if(pf==="memo" && !(r.memos&&r.memos.length)) return false;
-    if(pf==="msg" && !(r.msg&&String(r.msg).trim())) return false;
+    if(pf.has("unsent") && r.sent) return false;
+    if(pf.has("picked") && !r.picked) return false;
+    if(pf.has("memo") && !(r.memos&&r.memos.length)) return false;
+    if(pf.has("msg") && !(r.msg&&String(r.msg).trim())) return false;
     if(hasRange){
       const a=onlyDigits(r.added||"").slice(0,8), o=onlyDigits(r.주문일자||"").slice(0,8);
       const ok=(x)=> x && (!n1||x>=n1) && (!n2||x<=n2);
       if(!ok(a)&&!ok(o)) return false;
     }
     if(q) return norm(r.수취인).includes(q)||(qd&&onlyDigits(r.송장).includes(qd))||norm(r.주문).includes(q)||(qd&&qd.length>=3&&(onlyDigits(r.added||"").includes(qd)||onlyDigits(r.주문일자||"").includes(qd)));
-    if(pf||hasRange) return true;
+    if(pf.size||hasRange) return true;
     return (r.added||todayStr())>=cut;
   });
   let h=`<div class="tblwrap"><table><thead><tr>
@@ -1300,8 +1299,9 @@ function renderPick(){
     <td style="text-align:center"><input type="checkbox" class="chk" data-sent="${i}" ${r.sent?'checked':''}> ${r.sent?'<span class="pill sent">송신</span>':''}</td>
     <td style="white-space:nowrap"><button class="btn ghost sm xs" data-detail="${i}">세부</button> <button class="btn ghost sm xs ${r.memos&&r.memos.length?'hasmemo':''}" data-memo="${i}">메모${r.memos&&r.memos.length?`(${r.memos.length})`:''}</button></td>
   </tr>`).join("");
-  const pfName={unsent:"미송신",picked:"픽업검수 완료",memo:"메모 있음",msg:"물류메세지 있음"}[pf];
-  const scopeTxt = hasRange?`(날짜 ${n1||'처음'}~${n2||'끝'}${pfName?' · '+pfName+'만':''}${q?' · 검색':''})` : q?"(전체 기간 검색결과)" : pf?`(전체 기간 · ${pfName}만)` : "(최근 7일 — 이전 주문은 검색으로 조회)";
+  const PF_NAMES={unsent:"미송신",picked:"픽업검수 완료",memo:"메모 있음",msg:"물류메세지 있음"};
+  const pfName=[...pf].map(k=>PF_NAMES[k]).join("+");
+  const scopeTxt = hasRange?`(날짜 ${n1||'처음'}~${n2||'끝'}${pfName?' · '+pfName+'만':''}${q?' · 검색':''})` : q?"(전체 기간 검색결과)" : pf.size?`(전체 기간 · ${pfName}만)` : "(최근 7일 — 이전 주문은 검색으로 조회)";
   h+=`</tbody></table></div><div class="rowcount">${rows.length}건 표시 · 누적 ${pkData.rows.length}건 ${scopeTxt}</div>`;
   area.innerHTML=h;
   area.querySelectorAll("[data-msg]").forEach(inp=>inp.addEventListener("input",e=>{pkData.rows[+e.target.dataset.msg].msg=e.target.value;savePk();}));
@@ -1318,14 +1318,13 @@ function renderPick(){
 document.getElementById("pickSearch").addEventListener("input",renderPick);
 document.getElementById("pickFrom").addEventListener("change",renderPick);
 document.getElementById("pickTo").addEventListener("change",renderPick);
-document.getElementById("sendPickedBtn").addEventListener("click",()=>{ if(!pkData)return; let n=0; pkData.rows.forEach(r=>{if(r.picked&&!r.sent){r.sent=true;n++;}}); savePk(); renderPick();pickStat(); alert(`픽업완료건 ${n}건을 송신 처리했습니다.`); });
 function selIdx(){ return [...document.querySelectorAll("#pickArea .selDel:checked")].map(c=>+c.dataset.del); }
 document.getElementById("sendAllBtn").addEventListener("click",()=>{ if(!pkData)return; const s=selIdx(); if(!s.length){alert("왼쪽 체크박스로 송신할 주문을 먼저 선택해주세요.");return;} s.forEach(i=>{if(pkData.rows[i])pkData.rows[i].sent=true;}); savePk(); renderPick();pickStat(); });
 document.getElementById("unsendAllBtn").addEventListener("click",()=>{ if(!pkData)return; const s=selIdx(); if(!s.length){alert("왼쪽 체크박스로 송신 해제할 주문을 먼저 선택해주세요.");return;} s.forEach(i=>{if(pkData.rows[i])pkData.rows[i].sent=false;}); savePk(); renderPick();pickStat(); });
 document.querySelectorAll(".fbtn[data-pf]").forEach(b=>b.addEventListener("click",()=>{
   const f=b.dataset.pf;
-  pkFilter = (pkFilter===f) ? null : f;
-  document.querySelectorAll(".fbtn[data-pf]").forEach(x=>x.classList.toggle("on",x.dataset.pf===pkFilter));
+  if(pkFilters.has(f)) pkFilters.delete(f); else pkFilters.add(f);
+  b.classList.toggle("on",pkFilters.has(f));
   renderPick();
 }));
 
