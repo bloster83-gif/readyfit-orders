@@ -321,7 +321,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v3.6</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v3.7</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -1019,6 +1019,7 @@ async function pullServer(){
     const res=await fetch(syncUrl+(syncUrl.includes("?")?"&":"?")+"action=load");
     const j=await res.json();
     if(j&&Array.isArray(j.rows)){
+      j.rows=j.rows.filter(r=>/^\d{9,}$/.test(String(r.송장||"").trim()));
       pkData={headers:[],idx:{},rows:j.rows};
       savePkLocalOnly(); showPickPanel(`서버에서 ${j.rows.length}건 불러옴`);
       setSyncState("ok"); return true;
@@ -1042,6 +1043,7 @@ async function loadPk(){
   try{
     const st=JSON.parse(localStorage.getItem(PK_KEY)||"null");
     if(st&&st.rows&&st.rows.length){
+      st.rows=st.rows.filter(r=>/^\d{9,}$/.test(String(r.송장||"").trim())); // 잘못 저장된 행 자동 정리
       pkData={headers:[],idx:{},rows:st.rows};
       showPickPanel(`저장된 주문 ${st.rows.length}건 불러옴 — 최근 7일 표시, 이전 주문은 검색으로 조회`);
     }
@@ -1151,7 +1153,7 @@ function pickLoadAOA(aoa, label){
     주문일자:g(r,"주문일자"),
     송장:g(r,"송장번호"), 주문:g(r,"주문번호"), 수취인:g(r,"수취인"), 오픈마켓:g(r,"오픈마켓명"),
     상품:g(r,"상품명"), 옵션:g(r,"옵션"), 수량:g(r,"수량"), msg:g(r,"물류메세지"),
-    picked:false, sent:false, pickedAt:"" })).filter(r=>r.송장);
+    picked:false, sent:false, pickedAt:"" })).filter(r=>/^\d{9,}$/.test(String(r.송장).trim()));
   if(!rows.length){alert("송장번호가 있는 행이 없습니다.");return;}
   if(!pkData) pkData={headers, idx, rows:[]};
   const rkey=r=>String(r.송장)+"|"+String(r.주문);
