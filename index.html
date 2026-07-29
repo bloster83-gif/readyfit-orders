@@ -1056,12 +1056,25 @@ function scanResult(hit, rec, extra){
     document.getElementById("scanMeta").textContent=extra||"";
   }
 }
-// 현장 음성 안내 (TTS)
+// 현장 음성 안내 (TTS) — 한국어 여성 음성 우선
+let koVoice=null;
+function pickKoVoice(){
+  try{
+    const vs=speechSynthesis.getVoices().filter(v=>(v.lang||"").toLowerCase().startsWith("ko"));
+    if(!vs.length) return;
+    // 여성 음성 우선순위: Google 한국어(여성) > Heami/유나/SunHi 등 여성 이름 > 그 외 ko
+    koVoice = vs.find(v=>/google/i.test(v.name))
+          || vs.find(v=>/heami|yuna|유나|sunhi|선히|sora|소라|female|여성/i.test(v.name))
+          || vs[0];
+  }catch(_){}
+}
+try{ pickKoVoice(); speechSynthesis.onvoiceschanged=pickKoVoice; }catch(_){}
 function speak(txt){
   try{
     speechSynthesis.cancel();
     const u=new SpeechSynthesisUtterance(txt);
-    u.lang="ko-KR"; u.rate=1.05; u.volume=1;
+    u.lang="ko-KR"; u.rate=1.05; u.volume=1; u.pitch=1.15;
+    if(koVoice) u.voice=koVoice;
     speechSynthesis.speak(u);
   }catch(_){}
 }
