@@ -276,10 +276,10 @@ global.decryptXlsCFB=decryptXlsCFB;
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
   .seg button{background:transparent;border:none;color:var(--dim);padding:8px 14px;font-size:12.5px;cursor:pointer;font-weight:600}
   .seg button.on{background:var(--accent);color:#fff}
-  .scanbar{display:flex;gap:16px;align-items:center;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:16px}
+  .scanbar{display:flex;gap:16px;align-items:center;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:26px;margin-top:16px}
   .scanwrap{flex:1;min-width:280px}
-  .scanwrap label{display:block;font-size:12px;color:var(--dim);margin-bottom:6px;font-weight:600}
-  #scanInput{width:100%;background:var(--bg);color:var(--txt);border:2px solid var(--accent);border-radius:10px;padding:14px 16px;font-size:18px;font-weight:700;letter-spacing:.5px}
+  .scanwrap label{display:block;font-size:15px;color:var(--dim);margin-bottom:8px;font-weight:700}
+  #scanInput{width:100%;background:var(--bg);color:var(--txt);border:3px solid var(--accent);border-radius:14px;padding:24px 20px;font-size:28px;font-weight:800;letter-spacing:1px}
   #scanInput:focus{outline:none;border-color:var(--ok);box-shadow:0 0 0 3px rgba(57,192,122,.2)}
   .scanmsg{min-width:200px;font-size:15px;font-weight:700}
   .scanmsg.ok{color:var(--ok)} .scanmsg.err{color:var(--err)}
@@ -292,9 +292,10 @@ global.decryptXlsCFB=decryptXlsCFB;
   .pill.sent{background:#1e3a5f;color:#8fc0ff}
   td .msgin{width:150px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:4px 7px;font-size:12px}
   td .chk{width:17px;height:17px;cursor:pointer;accent-color:var(--accent)}
-  .scanresult{min-height:150px;display:flex;align-items:center;justify-content:center;text-align:center}
-  .scanname{font-size:46px;font-weight:800;color:var(--txt);letter-spacing:1px}
-  .scanurgent{margin-top:12px;font-size:22px;font-weight:700;color:var(--warn);min-height:26px}
+  .scanresult{min-height:230px;display:flex;align-items:center;justify-content:center;text-align:center}
+  .scanname{font-size:58px;font-weight:800;color:var(--txt);letter-spacing:1px}
+  .scanurgent{margin-top:14px;font-size:36px;font-weight:800;color:var(--warn);min-height:30px;background:#3a2a10;border-radius:12px;padding:6px 14px;display:inline-block}
+  .scanurgent:empty{display:none}
   .scanmeta{margin-top:10px;color:var(--dim);font-size:14px}
   .scanresult.hit{border-color:var(--ok);box-shadow:0 0 0 2px rgba(57,192,122,.25)}
   .scanresult.miss{border-color:var(--err);box-shadow:0 0 0 2px rgba(255,92,108,.25)}
@@ -320,7 +321,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v3.1</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v3.4</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -398,7 +399,20 @@ global.decryptXlsCFB=decryptXlsCFB;
     </div>
   </div>
 
-  <div class="foot">모든 처리는 브라우저 안에서만 이루어집니다. 스캔·검수 상태는 이 화면에서만 관리됩니다.</div>
+  <div class="foot">모든 처리는 브라우저 안에서만 이루어집니다. 스캔·검수 상태는 이 화면에서만 관리됩니다. 행을 클릭하면 수정·삭제할 수 있습니다.</div>
+</div>
+
+<!-- 주문 수정 모달 -->
+<div id="editModal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.55);align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;width:420px;max-height:85vh;overflow:auto">
+    <h2 style="margin:0 0 12px;font-size:15px">주문 수정</h2>
+    <div id="editFields"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn" id="editSave" style="flex:1">저장</button>
+      <button class="btn" id="editDelete" style="background:var(--err)">이 주문 삭제</button>
+      <button class="btn ghost sm" id="editCancel">취소</button>
+    </div>
+  </div>
 </div>
 
 <!-- ================= 바코드스캔 탭 ================= -->
@@ -935,6 +949,7 @@ document.getElementById("tabBtnScan").addEventListener("click",()=>showTab("scan
 
 const PSYN={
   "송장번호":["송장번호","운송장번호","운송장","invoice","tracking"],
+  "주문일자":["주문일자","주문일","결제일자","주문접수일자","주문일시"],
   "주문번호":["주문번호","order"],
   "수취인":["수취인","수취인명","수령인","수령인명","받는사람","인수자","고객명"],
   "오픈마켓명":["오픈마켓명","쇼핑몰명","오픈마켓","판매처","마켓명"],
@@ -1001,6 +1016,7 @@ function pickLoadAOA(aoa, label){
   const raw=body.filter(r=>r.some(c=>String(c).trim()!==""));
   const g=(r,k)=> idx[k]>=0?String(r[idx[k]]??"").trim():"";
   const rows=raw.map(r=>({ cells:r.slice(),
+    주문일자:g(r,"주문일자"),
     송장:g(r,"송장번호"), 주문:g(r,"주문번호"), 수취인:g(r,"수취인"), 오픈마켓:g(r,"오픈마켓명"),
     상품:g(r,"상품명"), 옵션:g(r,"옵션"), 수량:g(r,"수량"), msg:g(r,"물류메세지"),
     picked:false, sent:false, pickedAt:"" })).filter(r=>r.송장);
@@ -1054,8 +1070,9 @@ function renderPick(){
   const q=norm(document.getElementById("pickSearch").value||""); const qd=onlyDigits(q);
   const rows=pkData.rows.map((r,i)=>({r,i})).filter(({r})=> !q || norm(r.수취인).includes(q)||(qd&&onlyDigits(r.송장).includes(qd))||norm(r.주문).includes(q));
   let h=`<div class="tblwrap"><table><thead><tr>
-    <th>상태</th><th>픽업검수시간</th><th>수취인</th><th>송장번호</th><th>주문번호</th><th>오픈마켓</th><th>상품명</th><th>옵션</th><th>수량</th><th>물류 긴급 메세지</th><th>송신</th></tr></thead><tbody>`;
+    <th>주문일자</th><th>상태</th><th>픽업검수시간</th><th>수취인</th><th>송장번호</th><th>주문번호</th><th>오픈마켓</th><th>상품명</th><th>옵션</th><th>수량</th><th>물류 긴급 메세지</th><th>송신</th></tr></thead><tbody>`;
   h+=rows.map(({r,i})=>`<tr data-ri="${i}" class="${r.sent?'sent':r.picked?'picked':''}">
+    <td class="t">${r.주문일자||''}</td>
     <td>${r.picked?'<span class="pill done">픽업검수 완료</span>':'<span class="pill wait">대기</span>'}</td>
     <td class="t">${r.pickedAt||''}</td>
     <td>${r.수취인||''}</td><td>${r.송장||''}</td><td>${r.주문||''}</td><td>${r.오픈마켓||''}</td>
@@ -1067,6 +1084,10 @@ function renderPick(){
   area.innerHTML=h;
   area.querySelectorAll("[data-msg]").forEach(inp=>inp.addEventListener("input",e=>{pkData.rows[+e.target.dataset.msg].msg=e.target.value;}));
   area.querySelectorAll("[data-sent]").forEach(c=>c.addEventListener("change",e=>{pkData.rows[+e.target.dataset.sent].sent=e.target.checked;pickStat();renderPick();}));
+  area.querySelectorAll("tbody tr[data-ri]").forEach(tr=>tr.addEventListener("click",e=>{
+    if(e.target.tagName==="INPUT") return; // 메세지 입력·송신 체크는 제외
+    openEdit(+tr.dataset.ri);
+  }));
 }
 document.getElementById("pickSearch").addEventListener("input",renderPick);
 document.getElementById("sendPickedBtn").addEventListener("click",()=>{ if(!pkData)return; let n=0; pkData.rows.forEach(r=>{if(r.picked&&!r.sent){r.sent=true;n++;}}); renderPick();pickStat(); alert(`픽업완료건 ${n}건을 송신 처리했습니다.`); });
@@ -1088,6 +1109,30 @@ document.getElementById("pickDownloadBtn").addEventListener("click",()=>{
   XLSX.writeFile(wb,`${ymd}_픽업검수.xlsx`);
 });
 
+/* ---- 주문 수정/삭제 모달 ---- */
+let editIdx=-1;
+const EDIT_FIELDS=[["주문일자","주문일자"],["수취인","수취인"],["송장","송장번호"],["주문","주문번호"],["오픈마켓","오픈마켓"],["상품","상품명"],["옵션","옵션"],["수량","수량"],["msg","물류 긴급 메세지"]];
+function openEdit(i){
+  if(!pkData||!pkData.rows[i]) return;
+  editIdx=i; const r=pkData.rows[i];
+  document.getElementById("editFields").innerHTML=EDIT_FIELDS.map(([k,label])=>`
+    <div class="maprow"><span class="tag">${label}</span><input data-ef="${k}" value="${String(r[k]??"").replace(/"/g,"&quot;")}"></div>`).join("");
+  document.getElementById("editModal").style.display="flex";
+}
+function closeEdit(){ document.getElementById("editModal").style.display="none"; editIdx=-1; }
+document.getElementById("editCancel").addEventListener("click",closeEdit);
+document.getElementById("editModal").addEventListener("click",e=>{ if(e.target.id==="editModal") closeEdit(); });
+document.getElementById("editSave").addEventListener("click",()=>{
+  if(editIdx<0) return; const r=pkData.rows[editIdx];
+  document.querySelectorAll("#editFields [data-ef]").forEach(inp=>{ r[inp.dataset.ef]=inp.value; });
+  closeEdit(); renderPick(); pickStat();
+});
+document.getElementById("editDelete").addEventListener("click",()=>{
+  if(editIdx<0) return; const r=pkData.rows[editIdx];
+  if(!confirm(`이 주문을 목록에서 삭제할까요?\n${r.수취인||""} · ${r.송장||""}`)) return;
+  pkData.rows.splice(editIdx,1); closeEdit(); renderPick(); pickStat(); renderScanUI();
+});
+
 /* ---- 바코드스캔 ---- */
 function renderScanUI(){
   const has=pkData&&pkData.rows.length;
@@ -1096,7 +1141,15 @@ function renderScanUI(){
   pickStat();
   const logEl=document.getElementById("scanLog");
   if(!scanLog.length){ logEl.innerHTML=`<div class="empty">스캔 기록이 여기에 표시됩니다.</div>`; return; }
-  logEl.innerHTML=scanLog.slice(0,40).map(l=>`<div class="logrow"><span class="t">${l.t}</span><span class="${l.ok?'ok':'er'}">${l.ok?'✓':'✗'}</span><span>${l.text}</span></div>`).join("");
+  logEl.innerHTML=scanLog.slice(0,40).map((l,li)=>`<div class="logrow"><span class="t">${l.t}</span><span class="${l.ok?'ok':'er'}">${l.ok?'✓':'✗'}</span><span style="flex:1">${l.text}${l.cancelled?' <span class="pill wait">취소됨</span>':''}</span>${l.ok&&!l.cancelled?`<button class="btn ghost sm" data-cancel="${li}">픽업검수 취소</button>`:''}</div>`).join("");
+  logEl.querySelectorAll("[data-cancel]").forEach(b=>b.addEventListener("click",()=>{
+    const l=scanLog[+b.dataset.cancel]; if(!l||!pkData) return;
+    if(!confirm(`이 스캔을 취소할까요?\n${l.text}`)) return;
+    pkData.rows.forEach(r=>{ if(r.송장===l.inv){ r.picked=false; r.pickedAt=""; } });
+    l.cancelled=true;
+    renderPick(); pickStat(); renderScanUI();
+    speak("픽업검수 취소");
+  }));
 }
 function scanResult(hit, rec, extra){
   const box=document.getElementById("scanResult");
@@ -1146,7 +1199,7 @@ function doScan(v){
   if(hits.length){
     hits.forEach(r=>{ r.picked=true; if(!r.pickedAt) r.pickedAt=t; });
     scanResult(true, hits[0]);
-    scanLog.unshift({t:t.slice(11), ok:true, text:`${hits[0].수취인||''} · ${val}`});
+    scanLog.unshift({t:t.slice(11), ok:true, text:`${hits[0].수취인||''} · ${val}`, inv:hits[0].송장});
     renderPick(); renderScanUI();
     const tr=document.querySelector(`#pickArea tr[data-ri="${pkData.rows.indexOf(hits[0])}"]`);
     if(tr){ tr.classList.remove("flash"); void tr.offsetWidth; tr.classList.add("flash"); }
