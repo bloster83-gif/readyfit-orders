@@ -301,6 +301,7 @@ global.decryptXlsCFB=decryptXlsCFB;
   .pillbtn.blue:hover{background:rgba(79,140,255,.12)}
   .pillbtn.orange{border:2px solid var(--warn);color:var(--warn)}
   .pillbtn.orange:hover{background:rgba(245,166,35,.12)}
+  #searchToggleBtn.on{border-color:var(--accent);color:var(--accent);font-weight:800}
   .datein{background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:12.5px;color-scheme:dark}
   .datein:focus{outline:none;border-color:var(--accent)}
   tr.flash td{animation:flash .8s}
@@ -358,7 +359,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v4.8</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v5.0</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -405,6 +406,16 @@ global.decryptXlsCFB=decryptXlsCFB;
   <div id="pickPanel">
     <div class="toolbar">
       <button class="btn" id="uploadBtn">＋ 주문 업로드</button>
+      <button class="btn ghost" id="searchToggleBtn">🔍 검색</button>
+      <div class="stat">
+        <div>총 <b id="pkTotal">0</b></div>
+        <div>픽업완료 <b id="pkPicked" style="color:var(--ok)">0</b></div>
+        <div>송신 <b id="pkSent" style="color:var(--accent)">0</b></div>
+      </div>
+      <span id="syncState" style="font-size:11.5px;color:var(--dim)"></span>
+      <button class="btn" id="pickDownloadBtn" style="margin-left:auto">엑셀 다운로드</button>
+    </div>
+    <div class="toolbar" id="searchPanel" style="display:none">
       <input id="pickSearch" type="text" placeholder="🔍 수취인 · 송장 · 주문번호 · 날짜(0729) 검색" style="flex:1;min-width:200px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13px">
       <span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)">📅 <input type="date" id="pickFrom" class="datein"> ~ <input type="date" id="pickTo" class="datein"></span>
       <button class="fbtn" data-pf="unsent">미송신만</button>
@@ -415,13 +426,6 @@ global.decryptXlsCFB=decryptXlsCFB;
       <button class="pillbtn orange" id="unsendAllBtn">↩ 선택 송신해제</button>
       <button class="btn ghost sm" id="delSelBtn" style="color:var(--err);border-color:var(--err)">선택 삭제</button>
       <button class="btn ghost sm" id="syncCfgBtn">서버 연동</button>
-      <span id="syncState" style="font-size:11.5px;color:var(--dim)"></span>
-      <div class="stat">
-        <div>총 <b id="pkTotal">0</b></div>
-        <div>픽업완료 <b id="pkPicked" style="color:var(--ok)">0</b></div>
-        <div>송신 <b id="pkSent" style="color:var(--accent)">0</b></div>
-      </div>
-      <button class="btn" id="pickDownloadBtn" style="margin-left:auto">엑셀 다운로드</button>
     </div>
 
     <div class="card">
@@ -1049,7 +1053,10 @@ function nowStr(){ const d=new Date(); const p=n=>String(n).padStart(2,"0");
 
 let pkData=null; let scanLog=[]; let pkFilters=new Set();
 const PK_KEY="rf_pick_v1", SYNC_KEY="rf_sync_url";
+// 기본 서버 주소(레디핏 구글 시트) — 모든 기기가 자동으로 이 서버에 연결됩니다.
+const DEFAULT_SYNC_URL="https://script.google.com/macros/s/AKfycbz37RMThShYEnBuyDZG8cz_bV8b1CY13Fj6H48-B9fgSYjq5FBr4QmuS6H8OupEecEJBQ/exec";
 let syncUrl=""; try{ syncUrl=localStorage.getItem(SYNC_KEY)||""; }catch(_){}
+if(!syncUrl) syncUrl=DEFAULT_SYNC_URL;
 function todayStr(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 function stripRow(r){ const o=Object.assign({},r); delete o.cells; return o; }
 let pushTimer=null;
@@ -1062,7 +1069,7 @@ function pushServer(){
   },1200);
 }
 function setSyncState(st){ const el=document.getElementById("syncState"); if(!el)return;
-  el.textContent = syncUrl? (st==="ok"?"서버저장 ✓": st==="err"?"서버저장 실패":"서버 연동됨") : "이 컴퓨터에만 저장";
+  el.textContent = syncUrl? (st==="ok"?"서버저장 ✓": st==="err"?"서버저장 실패":"서버 연결중…") : "이 컴퓨터에만 저장";
   el.style.color = st==="err"?"var(--err)":"var(--dim)"; }
 function savePk(){
   try{ localStorage.setItem(PK_KEY, JSON.stringify({rows: pkData? pkData.rows.map(stripRow) : []})); }catch(_){}
@@ -1075,6 +1082,16 @@ async function pullServer(){
     const j=await res.json();
     if(j&&Array.isArray(j.rows)){
       j.rows=j.rows.filter(r=>/^\d{9,}$/.test(String(r.송장||"").trim()));
+      if(!j.rows.length){
+        // 서버가 비어있음 — 이 기기에 저장된 주문이 있으면 지우지 않고 서버로 올림
+        let st=null; try{ st=JSON.parse(localStorage.getItem(PK_KEY)||"null"); }catch(_){}
+        if(st&&st.rows&&st.rows.length){
+          st.rows=st.rows.filter(r=>/^\d{9,}$/.test(String(r.송장||"").trim()));
+          pkData={headers:[],idx:{},rows:st.rows};
+          showPickPanel(`저장된 주문 ${st.rows.length}건 불러옴 — 서버로 올리는 중`);
+          pushServer(); setSyncState("ok"); return true;
+        }
+      }
       pkData={headers:[],idx:{},rows:j.rows};
       savePkLocalOnly(); showPickPanel(`서버에서 ${j.rows.length}건 불러옴`);
       setSyncState("ok"); return true;
@@ -1326,6 +1343,19 @@ function renderPick(){
 document.getElementById("pickSearch").addEventListener("input",renderPick);
 document.getElementById("pickFrom").addEventListener("change",renderPick);
 document.getElementById("pickTo").addEventListener("change",renderPick);
+document.getElementById("searchToggleBtn").addEventListener("click",()=>{
+  const p=document.getElementById("searchPanel"), b=document.getElementById("searchToggleBtn");
+  const open=p.style.display==="none";
+  p.style.display=open?"":"none";
+  b.classList.toggle("on",open);
+  if(open){ setTimeout(()=>document.getElementById("pickSearch").focus(),50); }
+  else{ // 닫으면 검색조건 초기화
+    document.getElementById("pickSearch").value="";
+    document.getElementById("pickFrom").value=""; document.getElementById("pickTo").value="";
+    pkFilters.clear(); document.querySelectorAll(".fbtn[data-pf]").forEach(x=>x.classList.remove("on"));
+    renderPick();
+  }
+});
 function selIdx(){ return [...document.querySelectorAll("#pickArea .selDel:checked")].map(c=>+c.dataset.del); }
 document.getElementById("sendAllBtn").addEventListener("click",()=>{ if(!pkData)return; const s=selIdx(); if(!s.length){alert("왼쪽 체크박스로 송신할 주문을 먼저 선택해주세요.");return;} s.forEach(i=>{if(pkData.rows[i])pkData.rows[i].sent=true;}); savePk(); renderPick();pickStat(); });
 document.getElementById("unsendAllBtn").addEventListener("click",()=>{ if(!pkData)return; const s=selIdx(); if(!s.length){alert("왼쪽 체크박스로 송신 해제할 주문을 먼저 선택해주세요.");return;} s.forEach(i=>{if(pkData.rows[i])pkData.rows[i].sent=false;}); savePk(); renderPick();pickStat(); });
@@ -1419,12 +1449,12 @@ document.getElementById("memoAdd").addEventListener("click",()=>{
 
 /* ---- 서버 연동 설정 ---- */
 document.getElementById("syncCfgBtn").addEventListener("click",()=>{
-  const u=prompt("서버 저장 주소를 입력하세요.\n(구글 Apps Script 웹앱 URL — 설정 방법은 안내문서 참고. 비우면 이 컴퓨터에만 저장)", syncUrl||"");
+  const u=prompt("서버 저장 주소 (기본 서버가 이미 연결되어 있어 보통 바꿀 필요 없습니다.\n비우면 기본 서버 주소로 되돌아갑니다.)", syncUrl||"");
   if(u===null) return;
-  syncUrl=u.trim();
-  try{ localStorage.setItem(SYNC_KEY, syncUrl); }catch(_){}
+  syncUrl=u.trim()||DEFAULT_SYNC_URL;
+  try{ localStorage.setItem(SYNC_KEY, u.trim()); }catch(_){}
   setSyncState();
-  if(syncUrl){ loadPk(); alert("서버 연동이 설정되었습니다. 이후 변경사항이 자동으로 서버에 저장됩니다."); }
+  loadPk(); alert("서버 연동이 설정되었습니다. 이후 변경사항이 자동으로 서버에 저장됩니다.");
 });
 
 /* ---- 바코드스캔 ---- */
