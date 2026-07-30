@@ -359,7 +359,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v5.0</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v5.1</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -1305,7 +1305,9 @@ function renderPick(){
     }
     if(q) return norm(r.수취인).includes(q)||(qd&&onlyDigits(r.송장).includes(qd))||norm(r.주문).includes(q)||(qd&&qd.length>=3&&(onlyDigits(r.added||"").includes(qd)||onlyDigits(r.주문일자||"").includes(qd)));
     if(pf.size||hasRange) return true;
-    return (r.added||todayStr())>=cut;
+    // 최근 7일: 주문일자 기준 (없으면 업로드일자)
+    const d7=onlyDigits(r.주문일자||r.added||"").slice(0,8);
+    return d7 ? d7>=onlyDigits(cut) : true;
   });
   // 주문일자 기준 오름차순 정렬 — 가장 최근 주문이 맨 아래
   const dk=r=>onlyDigits(r.주문일자||r.added||"").slice(0,8)||"0";
