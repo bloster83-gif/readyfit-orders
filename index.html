@@ -359,7 +359,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v5.1</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v5.2</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -448,6 +448,16 @@ global.decryptXlsCFB=decryptXlsCFB;
       <button class="btn" id="editDelete" style="background:var(--err)">이 주문 삭제</button>
       <button class="btn ghost sm" id="editCancel">취소</button>
     </div>
+  </div>
+</div>
+
+<!-- 엑셀 다운로드 선택 모달 -->
+<div id="dlModal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.55);align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px;width:340px;text-align:center">
+    <h2 style="margin:0 0 16px;font-size:15px">엑셀 다운로드</h2>
+    <button class="btn" id="dlAllBtn" style="width:100%;margin-bottom:10px">전체 다운로드</button>
+    <button class="btn" id="dlSelBtn" style="width:100%;background:var(--ok);margin-bottom:10px">✔ 선택주문만</button>
+    <button class="btn ghost sm" id="dlCancel" style="width:100%">취소</button>
   </div>
 </div>
 
@@ -1368,14 +1378,31 @@ document.querySelectorAll(".fbtn[data-pf]").forEach(b=>b.addEventListener("click
   renderPick();
 }));
 
-document.getElementById("pickDownloadBtn").addEventListener("click",()=>{
-  if(!pkData||!pkData.rows.length)return;
+function downloadPickRows(rows, suffix){
+  if(!rows.length) return;
   const H=["주문일자","픽업검수","픽업검수시간","수취인","송장번호","주문번호","오픈마켓명","상품명","옵션","수량","물류 긴급 메세지","송신여부","업로드일","CS메모"];
-  const aoa=[H, ...pkData.rows.map(r=>[r.주문일자||"", r.picked?"픽업검수 완료":"", r.pickedAt||"", r.수취인||"", r.송장||"", r.주문||"", r.오픈마켓||"", r.상품||"", r.옵션||"", r.수량||"", r.msg||"", r.sent?"송신":"", r.added||"", (r.memos||[]).map(m=>`[${m.t}] ${m.text}`).join(" / ")])];
+  const aoa=[H, ...rows.map(r=>[r.주문일자||"", r.picked?"픽업검수 완료":"", r.pickedAt||"", r.수취인||"", r.송장||"", r.주문||"", r.오픈마켓||"", r.상품||"", r.옵션||"", r.수량||"", r.msg||"", r.sent?"송신":"", r.added||"", (r.memos||[]).map(m=>`[${m.t}] ${m.text}`).join(" / ")])];
   const ws=XLSX.utils.aoa_to_sheet(aoa); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"픽업검수");
   const d=new Date(); const ymd=d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0");
-  XLSX.writeFile(wb,`${ymd}_픽업검수.xlsx`);
+  XLSX.writeFile(wb,`${ymd}_픽업검수${suffix||""}.xlsx`);
+}
+document.getElementById("pickDownloadBtn").addEventListener("click",()=>{
+  if(!pkData||!pkData.rows.length)return;
+  const sel=selIdx();
+  document.getElementById("dlSelBtn").textContent=`✔ 선택주문만 (${sel.length}건)`;
+  document.getElementById("dlSelBtn").disabled=!sel.length;
+  document.getElementById("dlSelBtn").style.opacity=sel.length?"1":".4";
+  document.getElementById("dlAllBtn").textContent=`전체 다운로드 (${pkData.rows.length}건)`;
+  document.getElementById("dlModal").style.display="flex";
 });
+document.getElementById("dlAllBtn").addEventListener("click",()=>{ document.getElementById("dlModal").style.display="none"; downloadPickRows(pkData.rows,""); });
+document.getElementById("dlSelBtn").addEventListener("click",()=>{
+  const sel=selIdx(); if(!sel.length) return;
+  document.getElementById("dlModal").style.display="none";
+  downloadPickRows(sel.map(i=>pkData.rows[i]).filter(Boolean),"_선택");
+});
+document.getElementById("dlCancel").addEventListener("click",()=>{ document.getElementById("dlModal").style.display="none"; });
+document.getElementById("dlModal").addEventListener("click",e=>{ if(e.target.id==="dlModal") e.target.style.display="none"; });
 
 /* ---- 주문 수정/삭제 모달 ---- */
 let editIdx=-1;
