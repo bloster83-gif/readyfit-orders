@@ -359,7 +359,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v5.2</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v5.4</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -433,7 +433,7 @@ global.decryptXlsCFB=decryptXlsCFB;
     </div>
   </div>
 
-  <div class="foot">모든 처리는 브라우저 안에서만 이루어집니다. 스캔·검수 상태는 이 화면에서만 관리됩니다. 행을 클릭하면 수정·삭제할 수 있습니다.</div>
+  <div class="foot">스캔·검수 상태는 서버에 자동 저장되어 모든 기기에서 공유됩니다. [세부] 버튼으로 수정·삭제할 수 있습니다.</div>
 </div>
 
 <!-- 주문 수정 모달 -->
@@ -457,6 +457,7 @@ global.decryptXlsCFB=decryptXlsCFB;
     <h2 style="margin:0 0 16px;font-size:15px">엑셀 다운로드</h2>
     <button class="btn" id="dlAllBtn" style="width:100%;margin-bottom:10px">전체 다운로드</button>
     <button class="btn" id="dlSelBtn" style="width:100%;background:var(--ok);margin-bottom:10px">✔ 선택주문만</button>
+    <button class="btn" id="dlViewBtn" style="width:100%;background:var(--warn);color:#1a1408;margin-bottom:10px">현재 검색결과만</button>
     <button class="btn ghost sm" id="dlCancel" style="width:100%">취소</button>
   </div>
 </div>
@@ -1062,6 +1063,8 @@ function nowStr(){ const d=new Date(); const p=n=>String(n).padStart(2,"0");
   return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds()); }
 
 let pkData=null; let scanLog=[]; let pkFilters=new Set();
+let selKeys=new Set(); let pkView=[]; // 체크 선택(재렌더링에도 유지), 현재 화면에 표시된 행 인덱스
+function rkOf(r){ return String(r.송장||"")+"|"+String(r.주문||""); }
 const PK_KEY="rf_pick_v1", SYNC_KEY="rf_sync_url";
 // 기본 서버 주소(레디핏 구글 시트) — 모든 기기가 자동으로 이 서버에 연결됩니다.
 const DEFAULT_SYNC_URL="https://script.google.com/macros/s/AKfycbz37RMThShYEnBuyDZG8cz_bV8b1CY13Fj6H48-B9fgSYjq5FBr4QmuS6H8OupEecEJBQ/exec";
@@ -1069,23 +1072,24 @@ let syncUrl=""; try{ syncUrl=localStorage.getItem(SYNC_KEY)||""; }catch(_){}
 if(!syncUrl) syncUrl=DEFAULT_SYNC_URL;
 function todayStr(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 function stripRow(r){ const o=Object.assign({},r); delete o.cells; return o; }
-let pushTimer=null;
+let pushTimer=null, lastChangeAt=0;
 function pushServer(){
   if(!syncUrl||!pkData) return;
   clearTimeout(pushTimer);
   pushTimer=setTimeout(()=>{
     try{ fetch(syncUrl,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({action:"save",rows:pkData.rows.map(stripRow)})})
       .then(()=>setSyncState("ok")).catch(()=>setSyncState("err")); }catch(_){ setSyncState("err"); }
-  },1200);
+  },300);
 }
 function setSyncState(st){ const el=document.getElementById("syncState"); if(!el)return;
   el.textContent = syncUrl? (st==="ok"?"서버저장 ✓": st==="err"?"서버저장 실패":"서버 연결중…") : "이 컴퓨터에만 저장";
   el.style.color = st==="err"?"var(--err)":"var(--dim)"; }
 function savePk(){
+  lastChangeAt=Date.now();
   try{ localStorage.setItem(PK_KEY, JSON.stringify({rows: pkData? pkData.rows.map(stripRow) : []})); }catch(_){}
   pushServer();
 }
-async function pullServer(){
+async function pullServer(quiet){
   if(!syncUrl) return false;
   try{
     const res=await fetch(syncUrl+(syncUrl.includes("?")?"&":"?")+"action=load");
@@ -1103,12 +1107,25 @@ async function pullServer(){
         }
       }
       pkData={headers:[],idx:{},rows:j.rows};
-      savePkLocalOnly(); showPickPanel(`서버에서 ${j.rows.length}건 불러옴`);
+      savePkLocalOnly(); showPickPanel(quiet?null:`서버에서 ${j.rows.length}건 불러옴`);
       setSyncState("ok"); return true;
     }
   }catch(_){ setSyncState("err"); }
   return false;
 }
+/* 자동 서버 새로고침 — 다른 컴퓨터·폰의 변경을 몇 초 안에 반영 */
+function autoPullOk(){
+  if(document.hidden) return false;
+  if(typeof pendingScan!=="undefined"&&pendingScan) return false;      // 스캔 확인 대기중
+  if(typeof editIdx!=="undefined"&&editIdx>=0) return false;           // 수정 모달 열림
+  if(typeof memoIdx!=="undefined"&&memoIdx>=0) return false;           // 메모 모달 열림
+  if(Date.now()-lastChangeAt<8000) return false;                       // 방금 이 기기에서 수정함
+  const ae=document.activeElement;
+  if(ae&&(ae.tagName==="INPUT"||ae.tagName==="TEXTAREA")&&ae.id!=="scanInput") return false; // 입력중
+  return true;
+}
+setInterval(()=>{ if(autoPullOk()) pullServer(true); },15000);
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&autoPullOk()) pullServer(true); });
 function savePkLocalOnly(){ try{ localStorage.setItem(PK_KEY, JSON.stringify({rows: pkData? pkData.rows.map(stripRow) : []})); }catch(_){} }
 function showPickPanel(msg){
   if(msg) document.getElementById("pickDropHint").textContent=msg;
@@ -1325,7 +1342,7 @@ function renderPick(){
   let h=`<div class="tblwrap"><table><thead><tr>
     <th class="fz fz0"><input type="checkbox" class="chk" id="selAllChk" title="전체선택"></th><th class="fz fz1">업로드일자</th><th class="fz fz2">주문일자</th><th class="fz fz3">상태</th><th class="fz fz4">픽업검수시간</th><th class="fz fz5">수취인</th><th>송장번호</th><th>주문번호</th><th>주문사이트</th><th>상품명</th><th>옵션</th><th>수량</th><th>물류 긴급 메세지</th><th>송신</th><th>세부</th></tr></thead><tbody>`;
   h+=rows.map(({r,i})=>`<tr data-ri="${i}" class="${r.sent?'sent':r.picked?'picked':''}${r.msg&&String(r.msg).trim()?' urgent':''}">
-    <td class="fz fz0" style="text-align:center"><input type="checkbox" class="chk selDel" data-del="${i}"></td>
+    <td class="fz fz0" style="text-align:center"><input type="checkbox" class="chk selDel" data-del="${i}" ${selKeys.has(rkOf(r))?'checked':''}></td>
     <td class="fz fz1 t">${r.added||''}</td>
     <td class="fz fz2 t">${r.주문일자||''}</td>
     <td class="fz fz3">${r.picked?'<span class="pill done">픽업검수 완료</span>':'<span class="pill wait">대기</span>'}</td>
@@ -1343,14 +1360,19 @@ function renderPick(){
   area.innerHTML=h;
   area.querySelectorAll("[data-msg]").forEach(inp=>inp.addEventListener("input",e=>{pkData.rows[+e.target.dataset.msg].msg=e.target.value;savePk();}));
   area.querySelectorAll("[data-sent]").forEach(c=>c.addEventListener("change",e=>{pkData.rows[+e.target.dataset.sent].sent=e.target.checked;savePk();pickStat();renderPick();}));
-  area.querySelectorAll("tbody tr[data-ri]").forEach(tr=>tr.addEventListener("click",e=>{
-    if(e.target.tagName==="INPUT"||e.target.tagName==="BUTTON") return;
-    openEdit(+tr.dataset.ri);
-  }));
   area.querySelectorAll("[data-detail]").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();openEdit(+b.dataset.detail);}));
   area.querySelectorAll("[data-memo]").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();openMemo(+b.dataset.memo);}));
+  area.querySelectorAll(".selDel").forEach(c=>c.addEventListener("change",e=>{
+    const r0=pkData.rows[+e.target.dataset.del]; if(!r0) return;
+    if(e.target.checked) selKeys.add(rkOf(r0)); else selKeys.delete(rkOf(r0));
+  }));
   const sa=area.querySelector("#selAllChk");
-  if(sa) sa.addEventListener("change",()=>{ area.querySelectorAll(".selDel").forEach(c=>c.checked=sa.checked); });
+  if(sa) sa.addEventListener("change",()=>{ area.querySelectorAll(".selDel").forEach(c=>{
+    c.checked=sa.checked;
+    const r0=pkData.rows[+c.dataset.del]; if(!r0) return;
+    if(sa.checked) selKeys.add(rkOf(r0)); else selKeys.delete(rkOf(r0));
+  }); });
+  pkView=rows.map(x=>x.i);
 }
 document.getElementById("pickSearch").addEventListener("input",renderPick);
 document.getElementById("pickFrom").addEventListener("change",renderPick);
@@ -1368,7 +1390,7 @@ document.getElementById("searchToggleBtn").addEventListener("click",()=>{
     renderPick();
   }
 });
-function selIdx(){ return [...document.querySelectorAll("#pickArea .selDel:checked")].map(c=>+c.dataset.del); }
+function selIdx(){ if(!pkData) return []; return pkData.rows.map((r,i)=>selKeys.has(rkOf(r))?i:-1).filter(i=>i>=0); }
 document.getElementById("sendAllBtn").addEventListener("click",()=>{ if(!pkData)return; const s=selIdx(); if(!s.length){alert("왼쪽 체크박스로 송신할 주문을 먼저 선택해주세요.");return;} s.forEach(i=>{if(pkData.rows[i])pkData.rows[i].sent=true;}); savePk(); renderPick();pickStat(); });
 document.getElementById("unsendAllBtn").addEventListener("click",()=>{ if(!pkData)return; const s=selIdx(); if(!s.length){alert("왼쪽 체크박스로 송신 해제할 주문을 먼저 선택해주세요.");return;} s.forEach(i=>{if(pkData.rows[i])pkData.rows[i].sent=false;}); savePk(); renderPick();pickStat(); });
 document.querySelectorAll(".fbtn[data-pf]").forEach(b=>b.addEventListener("click",()=>{
@@ -1392,8 +1414,14 @@ document.getElementById("pickDownloadBtn").addEventListener("click",()=>{
   document.getElementById("dlSelBtn").textContent=`✔ 선택주문만 (${sel.length}건)`;
   document.getElementById("dlSelBtn").disabled=!sel.length;
   document.getElementById("dlSelBtn").style.opacity=sel.length?"1":".4";
+  document.getElementById("dlViewBtn").textContent=`현재 검색결과만 (${pkView.length}건)`;
   document.getElementById("dlAllBtn").textContent=`전체 다운로드 (${pkData.rows.length}건)`;
   document.getElementById("dlModal").style.display="flex";
+});
+document.getElementById("dlViewBtn").addEventListener("click",()=>{
+  if(!pkView.length) return;
+  document.getElementById("dlModal").style.display="none";
+  downloadPickRows(pkView.map(i=>pkData.rows[i]).filter(Boolean),"_검색결과");
 });
 document.getElementById("dlAllBtn").addEventListener("click",()=>{ document.getElementById("dlModal").style.display="none"; downloadPickRows(pkData.rows,""); });
 document.getElementById("dlSelBtn").addEventListener("click",()=>{
@@ -1441,9 +1469,10 @@ document.getElementById("editDelete").addEventListener("click",()=>{
 /* ---- 선택 삭제 ---- */
 document.getElementById("delSelBtn").addEventListener("click",()=>{
   if(!pkData) return;
-  const ids=[...document.querySelectorAll("#pickArea .selDel:checked")].map(c=>+c.dataset.del);
+  const ids=selIdx();
   if(!ids.length){ alert("삭제할 주문을 왼쪽 체크박스로 선택해주세요."); return; }
   if(!confirm(`선택한 ${ids.length}건을 목록에서 삭제할까요?`)) return;
+  ids.forEach(i=>selKeys.delete(rkOf(pkData.rows[i])));
   ids.sort((a,b)=>b-a).forEach(i=>pkData.rows.splice(i,1));
   savePk(); renderPick(); pickStat(); renderScanUI();
 });
