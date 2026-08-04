@@ -359,7 +359,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v5.4</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v5.5</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -1031,7 +1031,7 @@ function showTab(t){
   ["merge","pick","scan"].forEach(x=>{ document.getElementById("tab"+x[0].toUpperCase()+x.slice(1)).style.display = x===t?"":"none";
     document.getElementById("tabBtn"+x[0].toUpperCase()+x.slice(1)).classList.toggle("on",x===t); });
   document.getElementById("headSub").textContent=SUBTXT[t];
-  if(t==="scan") setTimeout(()=>{const s=document.getElementById("scanInput");if(s)s.focus();},50);
+  if(t==="scan"){ try{ renderScanUI(); }catch(_){} setTimeout(()=>{const s=document.getElementById("scanInput");if(s)s.focus();},50); }
 }
 document.getElementById("tabBtnMerge").addEventListener("click",()=>showTab("merge"));
 document.getElementById("tabBtnPick").addEventListener("click",()=>showTab("pick"));
@@ -1062,7 +1062,11 @@ const onlyDigits=s=>String(s==null?"":s).replace(/[^0-9]/g,"");
 function nowStr(){ const d=new Date(); const p=n=>String(n).padStart(2,"0");
   return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds()); }
 
-let pkData=null; let scanLog=[]; let pkFilters=new Set();
+let pkData=null; let pkFilters=new Set();
+/* 스캔 기록 — 새로고침해도 유지 (이 기기 브라우저에 저장) */
+const SCANLOG_KEY="rf_scanlog_v1";
+let scanLog=[]; try{ scanLog=JSON.parse(localStorage.getItem(SCANLOG_KEY)||"[]")||[]; }catch(_){ scanLog=[]; }
+function saveScanLog(){ try{ localStorage.setItem(SCANLOG_KEY, JSON.stringify(scanLog.slice(0,500))); }catch(_){} }
 let selKeys=new Set(); let pkView=[]; // 체크 선택(재렌더링에도 유지), 현재 화면에 표시된 행 인덱스
 function rkOf(r){ return String(r.송장||"")+"|"+String(r.주문||""); }
 const PK_KEY="rf_pick_v1", SYNC_KEY="rf_sync_url";
@@ -1529,7 +1533,7 @@ function renderScanUI(){
     const l=scanLog[+b.dataset.cancel]; if(!l||!pkData) return;
     if(!confirm(`이 스캔을 취소할까요?\n${l.text}`)) return;
     pkData.rows.forEach(r=>{ if(r.송장===l.inv){ r.picked=false; r.pickedAt=""; } }); savePk();
-    l.cancelled=true;
+    l.cancelled=true; saveScanLog();
     renderPick(); pickStat(); renderScanUI();
     speak("픽업검수 취소");
   }));
@@ -1597,11 +1601,11 @@ function resolvePending(ok){
   if(ok){
     hits.forEach(r=>{ r.picked=true; if(!r.pickedAt) r.pickedAt=t; }); savePk();
     scanResult(true, hits[0]);
-    scanLog.unshift({d:todayStr(), t:t.slice(11), ok:true, text:`${hits[0].수취인||''} · ${val}`, inv:hits[0].송장});
+    scanLog.unshift({d:todayStr(), t:t.slice(11), ok:true, text:`${hits[0].수취인||''} · ${val}`, inv:hits[0].송장}); saveScanLog();
     renderPick(); renderScanUI();
     speak(nm+" 픽업완료");
   }else{
-    scanLog.unshift({d:todayStr(), t:t.slice(11), ok:false, text:`보류(물류메세지) · ${hits[0].수취인||''} · ${val}`});
+    scanLog.unshift({d:todayStr(), t:t.slice(11), ok:false, text:`보류(물류메세지) · ${hits[0].수취인||''} · ${val}`}); saveScanLog();
     renderScanUI();
     document.getElementById("scanMeta").innerHTML=`송장 ${hits[0].송장} · 주문 ${hits[0].주문||'-'} <br><b style="color:var(--err)">픽업검수 보류됨 (미완료)</b>`;
     speak("검수 보류");
@@ -1626,7 +1630,7 @@ function doScan(v){
   if(hits.length){
     hits.forEach(r=>{ r.picked=true; if(!r.pickedAt) r.pickedAt=t; }); savePk();
     scanResult(true, hits[0]);
-    scanLog.unshift({d:todayStr(), t:t.slice(11), ok:true, text:`${hits[0].수취인||''} · ${val}`, inv:hits[0].송장});
+    scanLog.unshift({d:todayStr(), t:t.slice(11), ok:true, text:`${hits[0].수취인||''} · ${val}`, inv:hits[0].송장}); saveScanLog();
     renderPick(); renderScanUI();
     const tr=document.querySelector(`#pickArea tr[data-ri="${pkData.rows.indexOf(hits[0])}"]`);
     if(tr){ tr.classList.remove("flash"); void tr.offsetWidth; tr.classList.add("flash"); }
@@ -1635,7 +1639,7 @@ function doScan(v){
     speak(nm+" 픽업완료"+(hits[0].msg?". 물류메세지 확인":""));
   }else{
     scanResult(false,null,`일치하는 송장번호가 없습니다: ${val}`);
-    scanLog.unshift({d:todayStr(), t:t.slice(11), ok:false, text:`미매칭 · ${val}`});
+    scanLog.unshift({d:todayStr(), t:t.slice(11), ok:false, text:`미매칭 · ${val}`}); saveScanLog();
     renderScanUI();
     speak("미등록 송장입니다");
   }
