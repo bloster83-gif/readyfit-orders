@@ -359,7 +359,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v5.7</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v5.8</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -1043,6 +1043,7 @@ const PSYN={
   "송장번호":["송장번호","운송장번호","운송장","invoice","tracking"],
   "주문일자":["주문일자","주문일","결제일자","주문접수일자","주문일시"],
   "주문번호":["주문번호","order"],
+  "묶음주문번호":["묶음주문번호","묶음번호","묶음배송번호","합포장번호","묶음"],
   "수취인":["수취인","수취인명","수령인","수령인명","받는사람","인수자","고객명"],
   "오픈마켓명":["오픈마켓명","쇼핑몰명","오픈마켓","판매처","마켓명","주문사이트","사이트명"],
   "상품명":["오픈마켓상품명","상품명","쇼핑몰상품명","제품명"],
@@ -1105,7 +1106,12 @@ function mergeRows(a,b){
   (a||[]).forEach(put); (b||[]).forEach(put);
   const out=[];
   m.forEach((r,k)=>{ const t=delTombs[k]; if(t&&t>=(r.u||0)) return; out.push(r); });
-  return out;
+  // 2차: 주문번호+묶음주문번호가 같은 행은 하나로 (송장번호 교체시 옛 송장 행 제거)
+  const byO=new Map(); const rest=[];
+  out.forEach(r=>{ const o=String(r.주문||"").trim(); if(!o){ rest.push(r); return; }
+    const ok=o+"|"+String(r.묶음||"").trim();
+    const ex=byO.get(ok); if(!ex||((r.u||0)>(ex.u||0))) byO.set(ok, ex? fuseTie(r,ex): r); });
+  return rest.concat([...byO.values()]);
 }
 function rowsSig(rows){ try{ return JSON.stringify((rows||[]).map(r=>[rkOf(r),r.u||0,r.picked?1:0,r.sent?1:0,r.msg||"",(r.memos||[]).length]).sort()); }catch(_){ return ""; } }
 let pushBusy=false;
@@ -1300,28 +1306,43 @@ function pickLoadAOA(aoa, label){
   const g=(r,k)=> idx[k]>=0?String(r[idx[k]]??"").trim():"";
   const rows=raw.map(r=>({ cells:r.slice(),
     주문일자:g(r,"주문일자"),
-    송장:g(r,"송장번호"), 주문:g(r,"주문번호"), 수취인:g(r,"수취인"), 오픈마켓:g(r,"오픈마켓명"),
+    송장:g(r,"송장번호"), 주문:g(r,"주문번호"), 묶음:g(r,"묶음주문번호"), 수취인:g(r,"수취인"), 오픈마켓:g(r,"오픈마켓명"),
     상품:g(r,"상품명"), 옵션:g(r,"옵션"), 수량:g(r,"수량"), msg:g(r,"물류메세지"),
     picked:false, sent:false, pickedAt:"" })).filter(r=>/^\d{9,}$/.test(String(r.송장).trim()));
   if(!rows.length){alert("송장번호가 있는 행이 없습니다.");return;}
   if(!pkData) pkData={headers, idx, rows:[]};
   const rkey=r=>String(r.송장)+"|"+String(r.주문);
+  const okeyOf=r=>{ const o=String(r.주문||"").trim(); return o? o+"|"+String(r.묶음||"").trim() : null; };
   const exmap=new Map(pkData.rows.map(r=>[rkey(r),r]));
-  // 중복 검사: 전부 기존 주문이면 차단
+  const exByOkey=new Map(); pkData.rows.forEach(r=>{ const k=okeyOf(r); if(k) exByOkey.set(k,r); });
+  // 중복 검사: 전부 기존과 완전히 동일(송장까지 같음)하면 차단
   const dupN=rows.filter(nr=>exmap.has(rkey(nr))).length;
   if(rows.length>0 && dupN===rows.length){
     alert(`⚠ 이미 업로드된 데이터입니다.\n${rows.length}건 전부 기존 목록에 있는 주문이라 추가하지 않았습니다.`);
     return;
   }
-  let addedN=0, updN=0;
+  let addedN=0, updN=0, invN=0;
   rows.forEach(nr=>{
     nr.added=todayStr(); nr.memos=[];
     const ex=exmap.get(rkey(nr));
-    if(ex){ ["주문일자","수취인","오픈마켓","상품","옵션","수량"].forEach(f=>{ if(nr[f]) ex[f]=nr[f]; }); if(nr.msg&&!ex.msg) ex.msg=nr.msg; touch(ex); updN++; }
-    else{ touch(nr); delete delTombs[rkOf(nr)]; pkData.rows.push(nr); exmap.set(rkey(nr),nr); addedN++; }
+    if(ex){ // 송장+주문 완전 동일 — 정보만 갱신
+      ["주문일자","수취인","오픈마켓","상품","옵션","수량","묶음"].forEach(f=>{ if(nr[f]) ex[f]=nr[f]; });
+      if(nr.msg&&!ex.msg) ex.msg=nr.msg; touch(ex); updN++; return;
+    }
+    const ok=okeyOf(nr); const exO=ok? exByOkey.get(ok) : null;
+    if(exO){ // 주문번호+묶음주문번호 동일 — 2중 등록 대신 기존 주문의 송장번호를 교체
+      exmap.delete(rkey(exO));
+      exO.송장=nr.송장;
+      ["주문일자","수취인","오픈마켓","상품","옵션","수량","묶음"].forEach(f=>{ if(nr[f]) exO[f]=nr[f]; });
+      if(nr.msg&&!exO.msg) exO.msg=nr.msg;
+      touch(exO); delete delTombs[rkOf(exO)];
+      exmap.set(rkey(exO),exO); invN++; return;
+    }
+    touch(nr); delete delTombs[rkOf(nr)];
+    pkData.rows.push(nr); exmap.set(rkey(nr),nr); if(ok) exByOkey.set(ok,nr); addedN++;
   });
   savePk();
-  showPickPanel(`✓ ${label} — 신규 ${addedN}건 추가${updN?`, 중복 ${updN}건 갱신`:""} (누적 ${pkData.rows.length}건)`);
+  showPickPanel(`✓ ${label} — 신규 ${addedN}건${updN?`, 갱신 ${updN}건`:""}${invN?`, 송장번호 교체 ${invN}건`:""} (누적 ${pkData.rows.length}건)`);
 }
 // 엑셀 복사(Ctrl+C) → 붙여넣기(Ctrl+V)
 function handlePasteText(text){
@@ -1452,8 +1473,8 @@ document.querySelectorAll(".fbtn[data-pf]").forEach(b=>b.addEventListener("click
 
 function downloadPickRows(rows, suffix){
   if(!rows.length) return;
-  const H=["주문일자","픽업검수","픽업검수시간","수취인","송장번호","주문번호","오픈마켓명","상품명","옵션","수량","물류 긴급 메세지","송신여부","업로드일","CS메모"];
-  const aoa=[H, ...rows.map(r=>[r.주문일자||"", r.picked?"픽업검수 완료":"", r.pickedAt||"", r.수취인||"", r.송장||"", r.주문||"", r.오픈마켓||"", r.상품||"", r.옵션||"", r.수량||"", r.msg||"", r.sent?"송신":"", r.added||"", (r.memos||[]).map(m=>`[${m.t}] ${m.text}`).join(" / ")])];
+  const H=["주문일자","픽업검수","픽업검수시간","수취인","송장번호","주문번호","묶음주문번호","오픈마켓명","상품명","옵션","수량","물류 긴급 메세지","송신여부","업로드일","CS메모"];
+  const aoa=[H, ...rows.map(r=>[r.주문일자||"", r.picked?"픽업검수 완료":"", r.pickedAt||"", r.수취인||"", r.송장||"", r.주문||"", r.묶음||"", r.오픈마켓||"", r.상품||"", r.옵션||"", r.수량||"", r.msg||"", r.sent?"송신":"", r.added||"", (r.memos||[]).map(m=>`[${m.t}] ${m.text}`).join(" / ")])];
   const ws=XLSX.utils.aoa_to_sheet(aoa); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"픽업검수");
   const d=new Date(); const ymd=d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0");
   XLSX.writeFile(wb,`${ymd}_픽업검수${suffix||""}.xlsx`);
@@ -1484,7 +1505,7 @@ document.getElementById("dlModal").addEventListener("click",e=>{ if(e.target.id=
 
 /* ---- 주문 수정/삭제 모달 ---- */
 let editIdx=-1;
-const EDIT_FIELDS=[["주문일자","주문일자"],["수취인","수취인"],["송장","송장번호"],["주문","주문번호"],["오픈마켓","주문사이트"],["상품","상품명"],["옵션","옵션"],["수량","수량"],["msg","물류 긴급 메세지"]];
+const EDIT_FIELDS=[["주문일자","주문일자"],["수취인","수취인"],["송장","송장번호"],["주문","주문번호"],["묶음","묶음주문번호"],["오픈마켓","주문사이트"],["상품","상품명"],["옵션","옵션"],["수량","수량"],["msg","물류 긴급 메세지"]];
 function openEdit(i){
   if(!pkData||!pkData.rows[i]) return;
   editIdx=i; const r=pkData.rows[i];
