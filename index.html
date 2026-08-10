@@ -359,7 +359,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v5.8</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v5.9</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -1110,7 +1110,12 @@ function mergeRows(a,b){
   const byO=new Map(); const rest=[];
   out.forEach(r=>{ const o=String(r.주문||"").trim(); if(!o){ rest.push(r); return; }
     const ok=o+"|"+String(r.묶음||"").trim();
-    const ex=byO.get(ok); if(!ex||((r.u||0)>(ex.u||0))) byO.set(ok, ex? fuseTie(r,ex): r); });
+    const ex=byO.get(ok);
+    if(!ex){ byO.set(ok,r); return; }
+    const ru=r.u||0, eu=ex.u||0;
+    if(ru>eu) byO.set(ok,r);                 // 최신 행이 그대로 이김 (옛 상태를 섞지 않음)
+    else if(ru===eu) byO.set(ok,fuseTie(ex,r)); // 도장 없는 옛 데이터끼리만 필드 병합
+  });
   return rest.concat([...byO.values()]);
 }
 function rowsSig(rows){ try{ return JSON.stringify((rows||[]).map(r=>[rkOf(r),r.u||0,r.picked?1:0,r.sent?1:0,r.msg||"",(r.memos||[]).length]).sort()); }catch(_){ return ""; } }
@@ -1332,7 +1337,9 @@ function pickLoadAOA(aoa, label){
     const ok=okeyOf(nr); const exO=ok? exByOkey.get(ok) : null;
     if(exO){ // 주문번호+묶음주문번호 동일 — 2중 등록 대신 기존 주문의 송장번호를 교체
       exmap.delete(rkey(exO));
+      const invChanged = onlyDigits(exO.송장)!==onlyDigits(nr.송장);
       exO.송장=nr.송장;
+      if(invChanged){ exO.picked=false; exO.pickedAt=""; } // 송장이 바뀌면 새 송장으로 다시 스캔해야 완료
       ["주문일자","수취인","오픈마켓","상품","옵션","수량","묶음"].forEach(f=>{ if(nr[f]) exO[f]=nr[f]; });
       if(nr.msg&&!exO.msg) exO.msg=nr.msg;
       touch(exO); delete delTombs[rkOf(exO)];
