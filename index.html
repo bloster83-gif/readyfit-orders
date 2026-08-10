@@ -359,7 +359,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v5.6</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v5.7</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -1030,6 +1030,7 @@ const SUBTXT={merge:"수기취합 사이트 주문 엑셀 → 한 파일로 자�
 function showTab(t){
   ["merge","pick","scan"].forEach(x=>{ document.getElementById("tab"+x[0].toUpperCase()+x.slice(1)).style.display = x===t?"":"none";
     document.getElementById("tabBtn"+x[0].toUpperCase()+x.slice(1)).classList.toggle("on",x===t); });
+  if(t==="pick"){ try{ if(typeof autoPullOk==="function"&&autoPullOk()) pullServer(true); }catch(_){} }
   document.getElementById("headSub").textContent=SUBTXT[t];
   if(t==="scan"){ try{ renderScanUI(); }catch(_){} setTimeout(()=>{const s=document.getElementById("scanInput");if(s)s.focus();},50); }
 }
@@ -1083,9 +1084,24 @@ const DEL_KEY="rf_del_v1";
 let delTombs={}; try{ delTombs=JSON.parse(localStorage.getItem(DEL_KEY)||"{}")||{}; }catch(_){ delTombs={}; }
 function addTomb(r){ try{ delTombs[rkOf(r)]=Date.now(); const ks=Object.keys(delTombs); if(ks.length>2000) ks.slice(0,ks.length-2000).forEach(k=>delete delTombs[k]); localStorage.setItem(DEL_KEY, JSON.stringify(delTombs)); }catch(_){} }
 function validRow(r){ return r && /^\d{9,}$/.test(String(r.송장||"").trim()); }
+function fuseTie(x,y){
+  // 수정시각이 같은(주로 둘 다 도장 없는 옛 데이터) 두 행: 필드별로 합침 — 스캔·송신·메모가 어느 쪽에 있든 살림
+  const o=Object.assign({},x);
+  if(!o.picked&&y.picked){ o.picked=true; o.pickedAt=y.pickedAt||o.pickedAt||""; }
+  if(!o.pickedAt&&y.pickedAt) o.pickedAt=y.pickedAt;
+  if(!o.sent&&y.sent) o.sent=true;
+  if(!(o.msg&&String(o.msg).trim())&&y.msg) o.msg=y.msg;
+  const mm=new Map(); (y.memos||[]).concat(o.memos||[]).forEach(m0=>mm.set((m0.t||"")+"|"+(m0.text||""),m0)); o.memos=[...mm.values()];
+  return o;
+}
 function mergeRows(a,b){
   const m=new Map();
-  const put=r=>{ if(!validRow(r)) return; const k=rkOf(r); const ex=m.get(k); if(!ex||((r.u||0)>(ex.u||0))) m.set(k,r); };
+  const put=r=>{ if(!validRow(r)) return; const k=rkOf(r); const ex=m.get(k);
+    if(!ex){ m.set(k,r); return; }
+    const ru=r.u||0, eu=ex.u||0;
+    if(ru>eu) m.set(k,r);
+    else if(ru===eu) m.set(k,fuseTie(ex,r));
+  };
   (a||[]).forEach(put); (b||[]).forEach(put);
   const out=[];
   m.forEach((r,k)=>{ const t=delTombs[k]; if(t&&t>=(r.u||0)) return; out.push(r); });
@@ -1118,7 +1134,7 @@ function pushServer(){
   },300);
 }
 function setSyncState(st){ const el=document.getElementById("syncState"); if(!el)return;
-  el.textContent = syncUrl? (st==="ok"?"서버저장 ✓": st==="err"?"서버저장 실패":"서버 연결중…") : "이 컴퓨터에만 저장";
+  el.textContent = syncUrl? (st==="ok"?"동기화 ✓ "+new Date().toTimeString().slice(0,8): st==="err"?"서버저장 실패":"서버 연결중…") : "이 컴퓨터에만 저장";
   el.style.color = st==="err"?"var(--err)":"var(--dim)"; }
 function savePk(){
   lastChangeAt=Date.now();
@@ -1158,7 +1174,7 @@ function autoPullOk(){
   if(ae&&(ae.tagName==="INPUT"||ae.tagName==="TEXTAREA")&&ae.id!=="scanInput"&&ae.value) return false; // 입력중
   return true;
 }
-setInterval(()=>{ if(autoPullOk()) pullServer(true); },5000);
+setInterval(()=>{ if(autoPullOk()) pullServer(true); },3000);
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&autoPullOk()) pullServer(true); });
 function savePkLocalOnly(){ try{ localStorage.setItem(PK_KEY, JSON.stringify({rows: pkData? pkData.rows.map(stripRow) : []})); }catch(_){} }
 function showPickPanel(msg){
