@@ -359,7 +359,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v5.5</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v5.6</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -1077,12 +1077,44 @@ if(!syncUrl) syncUrl=DEFAULT_SYNC_URL;
 function todayStr(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 function stripRow(r){ const o=Object.assign({},r); delete o.cells; return o; }
 let pushTimer=null, lastChangeAt=0;
+/* ---- 행 단위 병합 동기화: 기기끼리 서로 덮어쓰지 않도록 ---- */
+function touch(r){ if(r) r.u=Date.now(); }
+const DEL_KEY="rf_del_v1";
+let delTombs={}; try{ delTombs=JSON.parse(localStorage.getItem(DEL_KEY)||"{}")||{}; }catch(_){ delTombs={}; }
+function addTomb(r){ try{ delTombs[rkOf(r)]=Date.now(); const ks=Object.keys(delTombs); if(ks.length>2000) ks.slice(0,ks.length-2000).forEach(k=>delete delTombs[k]); localStorage.setItem(DEL_KEY, JSON.stringify(delTombs)); }catch(_){} }
+function validRow(r){ return r && /^\d{9,}$/.test(String(r.송장||"").trim()); }
+function mergeRows(a,b){
+  const m=new Map();
+  const put=r=>{ if(!validRow(r)) return; const k=rkOf(r); const ex=m.get(k); if(!ex||((r.u||0)>(ex.u||0))) m.set(k,r); };
+  (a||[]).forEach(put); (b||[]).forEach(put);
+  const out=[];
+  m.forEach((r,k)=>{ const t=delTombs[k]; if(t&&t>=(r.u||0)) return; out.push(r); });
+  return out;
+}
+function rowsSig(rows){ try{ return JSON.stringify((rows||[]).map(r=>[rkOf(r),r.u||0,r.picked?1:0,r.sent?1:0,r.msg||"",(r.memos||[]).length]).sort()); }catch(_){ return ""; } }
+let pushBusy=false;
 function pushServer(){
   if(!syncUrl||!pkData) return;
   clearTimeout(pushTimer);
-  pushTimer=setTimeout(()=>{
-    try{ fetch(syncUrl,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({action:"save",rows:pkData.rows.map(stripRow)})})
-      .then(()=>setSyncState("ok")).catch(()=>setSyncState("err")); }catch(_){ setSyncState("err"); }
+  pushTimer=setTimeout(async ()=>{
+    if(pushBusy){ pushServer(); return; }
+    pushBusy=true;
+    try{
+      // 저장 직전 서버 내용과 병합 — 다른 기기의 스캔·변경을 덮어쓰지 않음
+      try{
+        const res=await fetch(syncUrl+(syncUrl.includes("?")?"&":"?")+"action=load");
+        const j=await res.json();
+        if(j&&Array.isArray(j.rows)){
+          const before=rowsSig(pkData.rows);
+          pkData.rows=mergeRows(pkData.rows, j.rows);
+          savePkLocalOnly();
+          if(rowsSig(pkData.rows)!==before){ try{ renderPick(); pickStat(); renderScanUI(); }catch(_){} }
+        }
+      }catch(_){}
+      await fetch(syncUrl,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({action:"save",rows:pkData.rows.map(stripRow)})});
+      setSyncState("ok");
+    }catch(_){ setSyncState("err"); }
+    pushBusy=false;
   },300);
 }
 function setSyncState(st){ const el=document.getElementById("syncState"); if(!el)return;
@@ -1099,19 +1131,17 @@ async function pullServer(quiet){
     const res=await fetch(syncUrl+(syncUrl.includes("?")?"&":"?")+"action=load");
     const j=await res.json();
     if(j&&Array.isArray(j.rows)){
-      j.rows=j.rows.filter(r=>/^\d{9,}$/.test(String(r.송장||"").trim()));
-      if(!j.rows.length){
-        // 서버가 비어있음 — 이 기기에 저장된 주문이 있으면 지우지 않고 서버로 올림
-        let st=null; try{ st=JSON.parse(localStorage.getItem(PK_KEY)||"null"); }catch(_){}
-        if(st&&st.rows&&st.rows.length){
-          st.rows=st.rows.filter(r=>/^\d{9,}$/.test(String(r.송장||"").trim()));
-          pkData={headers:[],idx:{},rows:st.rows};
-          showPickPanel(`저장된 주문 ${st.rows.length}건 불러옴 — 서버로 올리는 중`);
-          pushServer(); setSyncState("ok"); return true;
-        }
-      }
-      pkData={headers:[],idx:{},rows:j.rows};
-      savePkLocalOnly(); showPickPanel(quiet?null:`서버에서 ${j.rows.length}건 불러옴`);
+      const serverRows=j.rows.filter(validRow);
+      let localRows=pkData?pkData.rows:null;
+      if(!localRows){ try{ const st=JSON.parse(localStorage.getItem(PK_KEY)||"null"); localRows=(st&&st.rows)||[]; }catch(_){ localRows=[]; } }
+      const before=pkData?rowsSig(pkData.rows):null;
+      const merged=mergeRows(localRows, serverRows);
+      pkData={headers:[],idx:{},rows:merged};
+      savePkLocalOnly();
+      const changed = before===null || rowsSig(merged)!==before;
+      if(changed) showPickPanel(quiet?null:`서버에서 불러옴 (총 ${merged.length}건)`);
+      // 이 기기에만 있는 최신 변경이 있으면 서버에도 반영
+      if(rowsSig(merged)!==rowsSig(serverRows)) pushServer();
       setSyncState("ok"); return true;
     }
   }catch(_){ setSyncState("err"); }
@@ -1123,12 +1153,12 @@ function autoPullOk(){
   if(typeof pendingScan!=="undefined"&&pendingScan) return false;      // 스캔 확인 대기중
   if(typeof editIdx!=="undefined"&&editIdx>=0) return false;           // 수정 모달 열림
   if(typeof memoIdx!=="undefined"&&memoIdx>=0) return false;           // 메모 모달 열림
-  if(Date.now()-lastChangeAt<8000) return false;                       // 방금 이 기기에서 수정함
+  if(Date.now()-lastChangeAt<3000) return false;                       // 방금 이 기기에서 수정함
   const ae=document.activeElement;
-  if(ae&&(ae.tagName==="INPUT"||ae.tagName==="TEXTAREA")&&ae.id!=="scanInput") return false; // 입력중
+  if(ae&&(ae.tagName==="INPUT"||ae.tagName==="TEXTAREA")&&ae.id!=="scanInput"&&ae.value) return false; // 입력중
   return true;
 }
-setInterval(()=>{ if(autoPullOk()) pullServer(true); },15000);
+setInterval(()=>{ if(autoPullOk()) pullServer(true); },5000);
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&autoPullOk()) pullServer(true); });
 function savePkLocalOnly(){ try{ localStorage.setItem(PK_KEY, JSON.stringify({rows: pkData? pkData.rows.map(stripRow) : []})); }catch(_){} }
 function showPickPanel(msg){
@@ -1271,8 +1301,8 @@ function pickLoadAOA(aoa, label){
   rows.forEach(nr=>{
     nr.added=todayStr(); nr.memos=[];
     const ex=exmap.get(rkey(nr));
-    if(ex){ ["주문일자","수취인","오픈마켓","상품","옵션","수량"].forEach(f=>{ if(nr[f]) ex[f]=nr[f]; }); if(nr.msg&&!ex.msg) ex.msg=nr.msg; updN++; }
-    else{ pkData.rows.push(nr); exmap.set(rkey(nr),nr); addedN++; }
+    if(ex){ ["주문일자","수취인","오픈마켓","상품","옵션","수량"].forEach(f=>{ if(nr[f]) ex[f]=nr[f]; }); if(nr.msg&&!ex.msg) ex.msg=nr.msg; touch(ex); updN++; }
+    else{ touch(nr); delete delTombs[rkOf(nr)]; pkData.rows.push(nr); exmap.set(rkey(nr),nr); addedN++; }
   });
   savePk();
   showPickPanel(`✓ ${label} — 신규 ${addedN}건 추가${updN?`, 중복 ${updN}건 갱신`:""} (누적 ${pkData.rows.length}건)`);
@@ -1362,8 +1392,8 @@ function renderPick(){
   const scopeTxt = hasRange?`(날짜 ${n1||'처음'}~${n2||'끝'}${pfName?' · '+pfName+'만':''}${q?' · 검색':''})` : q?"(전체 기간 검색결과)" : pf.size?`(전체 기간 · ${pfName}만)` : "(최근 7일 — 이전 주문은 검색으로 조회)";
   h+=`</tbody></table></div><div class="rowcount">${rows.length}건 표시 · 누적 ${pkData.rows.length}건 ${scopeTxt}</div>`;
   area.innerHTML=h;
-  area.querySelectorAll("[data-msg]").forEach(inp=>inp.addEventListener("input",e=>{pkData.rows[+e.target.dataset.msg].msg=e.target.value;savePk();}));
-  area.querySelectorAll("[data-sent]").forEach(c=>c.addEventListener("change",e=>{pkData.rows[+e.target.dataset.sent].sent=e.target.checked;savePk();pickStat();renderPick();}));
+  area.querySelectorAll("[data-msg]").forEach(inp=>inp.addEventListener("input",e=>{const r0=pkData.rows[+e.target.dataset.msg];r0.msg=e.target.value;touch(r0);savePk();}));
+  area.querySelectorAll("[data-sent]").forEach(c=>c.addEventListener("change",e=>{const r0=pkData.rows[+e.target.dataset.sent];r0.sent=e.target.checked;touch(r0);savePk();pickStat();renderPick();}));
   area.querySelectorAll("[data-detail]").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();openEdit(+b.dataset.detail);}));
   area.querySelectorAll("[data-memo]").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();openMemo(+b.dataset.memo);}));
   area.querySelectorAll(".selDel").forEach(c=>c.addEventListener("change",e=>{
@@ -1395,8 +1425,8 @@ document.getElementById("searchToggleBtn").addEventListener("click",()=>{
   }
 });
 function selIdx(){ if(!pkData) return []; return pkData.rows.map((r,i)=>selKeys.has(rkOf(r))?i:-1).filter(i=>i>=0); }
-document.getElementById("sendAllBtn").addEventListener("click",()=>{ if(!pkData)return; const s=selIdx(); if(!s.length){alert("왼쪽 체크박스로 송신할 주문을 먼저 선택해주세요.");return;} s.forEach(i=>{if(pkData.rows[i])pkData.rows[i].sent=true;}); savePk(); renderPick();pickStat(); });
-document.getElementById("unsendAllBtn").addEventListener("click",()=>{ if(!pkData)return; const s=selIdx(); if(!s.length){alert("왼쪽 체크박스로 송신 해제할 주문을 먼저 선택해주세요.");return;} s.forEach(i=>{if(pkData.rows[i])pkData.rows[i].sent=false;}); savePk(); renderPick();pickStat(); });
+document.getElementById("sendAllBtn").addEventListener("click",()=>{ if(!pkData)return; const s=selIdx(); if(!s.length){alert("왼쪽 체크박스로 송신할 주문을 먼저 선택해주세요.");return;} s.forEach(i=>{if(pkData.rows[i]){pkData.rows[i].sent=true;touch(pkData.rows[i]);}}); savePk(); renderPick();pickStat(); });
+document.getElementById("unsendAllBtn").addEventListener("click",()=>{ if(!pkData)return; const s=selIdx(); if(!s.length){alert("왼쪽 체크박스로 송신 해제할 주문을 먼저 선택해주세요.");return;} s.forEach(i=>{if(pkData.rows[i]){pkData.rows[i].sent=false;touch(pkData.rows[i]);}}); savePk(); renderPick();pickStat(); });
 document.querySelectorAll(".fbtn[data-pf]").forEach(b=>b.addEventListener("click",()=>{
   const f=b.dataset.pf;
   if(pkFilters.has(f)) pkFilters.delete(f); else pkFilters.add(f);
@@ -1456,18 +1486,18 @@ document.getElementById("editModal").addEventListener("click",e=>{ if(e.target.i
 document.getElementById("editSave").addEventListener("click",()=>{
   if(editIdx<0) return; const r=pkData.rows[editIdx];
   document.querySelectorAll("#editFields [data-ef]").forEach(inp=>{ r[inp.dataset.ef]=inp.value; });
-  savePk(); closeEdit(); renderPick(); pickStat();
+  touch(r); savePk(); closeEdit(); renderPick(); pickStat();
 });
 document.getElementById("editUnpick").addEventListener("click",()=>{
   if(editIdx<0) return; const r=pkData.rows[editIdx];
   if(!confirm(`픽업검수를 해제할까요?\n${r.수취인||""} · ${r.송장||""}`)) return;
-  r.picked=false; r.pickedAt="";
+  r.picked=false; r.pickedAt=""; touch(r);
   savePk(); closeEdit(); renderPick(); pickStat(); renderScanUI();
 });
 document.getElementById("editDelete").addEventListener("click",()=>{
   if(editIdx<0) return; const r=pkData.rows[editIdx];
   if(!confirm(`이 주문을 목록에서 삭제할까요?\n${r.수취인||""} · ${r.송장||""}`)) return;
-  pkData.rows.splice(editIdx,1); savePk(); closeEdit(); renderPick(); pickStat(); renderScanUI();
+  addTomb(pkData.rows[editIdx]); pkData.rows.splice(editIdx,1); savePk(); closeEdit(); renderPick(); pickStat(); renderScanUI();
 });
 
 /* ---- 선택 삭제 ---- */
@@ -1476,7 +1506,7 @@ document.getElementById("delSelBtn").addEventListener("click",()=>{
   const ids=selIdx();
   if(!ids.length){ alert("삭제할 주문을 왼쪽 체크박스로 선택해주세요."); return; }
   if(!confirm(`선택한 ${ids.length}건을 목록에서 삭제할까요?`)) return;
-  ids.forEach(i=>selKeys.delete(rkOf(pkData.rows[i])));
+  ids.forEach(i=>{selKeys.delete(rkOf(pkData.rows[i]));addTomb(pkData.rows[i]);});
   ids.sort((a,b)=>b-a).forEach(i=>pkData.rows.splice(i,1));
   savePk(); renderPick(); pickStat(); renderScanUI();
 });
@@ -1504,7 +1534,7 @@ document.getElementById("memoAdd").addEventListener("click",()=>{
   if(memoIdx<0) return; const r=pkData.rows[memoIdx];
   const txt=document.getElementById("memoText").value.trim(); if(!txt) return;
   if(!r.memos) r.memos=[];
-  r.memos.push({t:nowStr(), text:txt});
+  r.memos.push({t:nowStr(), text:txt}); touch(r);
   document.getElementById("memoText").value="";
   savePk(); renderMemoList(r); renderPick();
 });
@@ -1532,7 +1562,7 @@ function renderScanUI(){
   logEl.querySelectorAll("[data-cancel]").forEach(b=>b.addEventListener("click",()=>{
     const l=scanLog[+b.dataset.cancel]; if(!l||!pkData) return;
     if(!confirm(`이 스캔을 취소할까요?\n${l.text}`)) return;
-    pkData.rows.forEach(r=>{ if(r.송장===l.inv){ r.picked=false; r.pickedAt=""; } }); savePk();
+    pkData.rows.forEach(r=>{ if(r.송장===l.inv){ r.picked=false; r.pickedAt=""; touch(r); } }); savePk();
     l.cancelled=true; saveScanLog();
     renderPick(); pickStat(); renderScanUI();
     speak("픽업검수 취소");
@@ -1599,7 +1629,7 @@ function resolvePending(ok){
   const t=nowStr();
   const nm=(hits[0].수취인||"").replace(/\(.*?\)/g,"").trim();
   if(ok){
-    hits.forEach(r=>{ r.picked=true; if(!r.pickedAt) r.pickedAt=t; }); savePk();
+    hits.forEach(r=>{ r.picked=true; if(!r.pickedAt) r.pickedAt=t; touch(r); }); savePk();
     scanResult(true, hits[0]);
     scanLog.unshift({d:todayStr(), t:t.slice(11), ok:true, text:`${hits[0].수취인||''} · ${val}`, inv:hits[0].송장}); saveScanLog();
     renderPick(); renderScanUI();
