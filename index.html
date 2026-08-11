@@ -359,7 +359,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v6.1</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v6.2</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -1070,7 +1070,7 @@ const SCANLOG_KEY="rf_scanlog_v1";
 let scanLog=[]; try{ scanLog=JSON.parse(localStorage.getItem(SCANLOG_KEY)||"[]")||[]; }catch(_){ scanLog=[]; }
 function saveScanLog(){ try{ localStorage.setItem(SCANLOG_KEY, JSON.stringify(scanLog.slice(0,500))); }catch(_){} }
 let selKeys=new Set(); let pkView=[]; // 체크 선택(재렌더링에도 유지), 현재 화면에 표시된 행 인덱스
-function rkOf(r){ return String(r.송장||"")+"|"+String(r.주문||""); }
+function rkOf(r){ return String(r.송장||"")+"|"+String(r.주문||"")+"|"+String(r.묶음||""); }
 const PK_KEY="rf_pick_v1", SYNC_KEY="rf_sync_url";
 // 기본 서버 주소(레디핏 구글 시트) — 모든 기기가 자동으로 이 서버에 연결됩니다.
 const DEFAULT_SYNC_URL="https://script.google.com/macros/s/AKfycbz37RMThShYEnBuyDZG8cz_bV8b1CY13Fj6H48-B9fgSYjq5FBr4QmuS6H8OupEecEJBQ/exec";
@@ -1324,7 +1324,7 @@ function pickLoadAOA(aoa, label){
   }).filter(r=>/^\d{9,}$/.test(String(r.송장).trim()));
   if(!rows.length){alert("송장번호가 있는 행이 없습니다.");return;}
   if(!pkData) pkData={headers, idx, rows:[]};
-  const rkey=r=>String(r.송장)+"|"+String(r.주문);
+  const rkey=r=>rkOf(r); // 송장+주문번호+묶음주문번호로 구분
   const okeyOf=r=>{ const o=String(r.주문||"").trim(); return o? o+"|"+String(r.묶음||"").trim() : null; };
   const exmap=new Map(pkData.rows.map(r=>[rkey(r),r]));
   const exByOkey=new Map(); pkData.rows.forEach(r=>{ const k=okeyOf(r); if(k) exByOkey.set(k,r); });
