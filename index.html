@@ -359,7 +359,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v5.9</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v6.0</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -1083,7 +1083,8 @@ let pushTimer=null, lastChangeAt=0;
 function touch(r){ if(r) r.u=Date.now(); }
 const DEL_KEY="rf_del_v1";
 let delTombs={}; try{ delTombs=JSON.parse(localStorage.getItem(DEL_KEY)||"{}")||{}; }catch(_){ delTombs={}; }
-function addTomb(r){ try{ delTombs[rkOf(r)]=Date.now(); const ks=Object.keys(delTombs); if(ks.length>2000) ks.slice(0,ks.length-2000).forEach(k=>delete delTombs[k]); localStorage.setItem(DEL_KEY, JSON.stringify(delTombs)); }catch(_){} }
+function addTombKey(k){ try{ delTombs[k]=Date.now(); const ks=Object.keys(delTombs); if(ks.length>2000) ks.slice(0,ks.length-2000).forEach(x=>delete delTombs[x]); localStorage.setItem(DEL_KEY, JSON.stringify(delTombs)); }catch(_){} }
+function addTomb(r){ addTombKey(rkOf(r)); }
 function validRow(r){ return r && /^\d{9,}$/.test(String(r.송장||"").trim()); }
 function fuseTie(x,y){
   // 수정시각이 같은(주로 둘 다 도장 없는 옛 데이터) 두 행: 필드별로 합침 — 스캔·송신·메모가 어느 쪽에 있든 살림
@@ -1338,6 +1339,7 @@ function pickLoadAOA(aoa, label){
     if(exO){ // 주문번호+묶음주문번호 동일 — 2중 등록 대신 기존 주문의 송장번호를 교체
       exmap.delete(rkey(exO));
       const invChanged = onlyDigits(exO.송장)!==onlyDigits(nr.송장);
+      if(invChanged) addTombKey(rkOf(exO)); // 옛 송장 이름표 삭제 처리
       exO.송장=nr.송장;
       if(invChanged){ exO.picked=false; exO.pickedAt=""; } // 송장이 바뀌면 새 송장으로 다시 스캔해야 완료
       ["주문일자","수취인","오픈마켓","상품","옵션","수량","묶음"].forEach(f=>{ if(nr[f]) exO[f]=nr[f]; });
@@ -1529,8 +1531,11 @@ document.getElementById("editCancel").addEventListener("click",closeEdit);
 document.getElementById("editModal").addEventListener("click",e=>{ if(e.target.id==="editModal") closeEdit(); });
 document.getElementById("editSave").addEventListener("click",()=>{
   if(editIdx<0) return; const r=pkData.rows[editIdx];
+  const oldKey=rkOf(r);
   document.querySelectorAll("#editFields [data-ef]").forEach(inp=>{ r[inp.dataset.ef]=inp.value; });
-  touch(r); savePk(); closeEdit(); renderPick(); pickStat();
+  touch(r);
+  if(rkOf(r)!==oldKey){ addTombKey(oldKey); delete delTombs[rkOf(r)]; } // 송장·주문번호 수정시 옛 이름표 삭제 처리 (동기화 중복 방지)
+  savePk(); closeEdit(); renderPick(); pickStat();
 });
 document.getElementById("editUnpick").addEventListener("click",()=>{
   if(editIdx<0) return; const r=pkData.rows[editIdx];
