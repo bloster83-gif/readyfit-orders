@@ -359,7 +359,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v6.2</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v6.3</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -1070,7 +1070,11 @@ const SCANLOG_KEY="rf_scanlog_v1";
 let scanLog=[]; try{ scanLog=JSON.parse(localStorage.getItem(SCANLOG_KEY)||"[]")||[]; }catch(_){ scanLog=[]; }
 function saveScanLog(){ try{ localStorage.setItem(SCANLOG_KEY, JSON.stringify(scanLog.slice(0,500))); }catch(_){} }
 let selKeys=new Set(); let pkView=[]; // 체크 선택(재렌더링에도 유지), 현재 화면에 표시된 행 인덱스
-function rkOf(r){ return String(r.송장||"")+"|"+String(r.주문||"")+"|"+String(r.묶음||""); }
+function rkOf(r){
+  // 구분 열쇠: 주문번호+묶음주문번호 (주문번호가 없는 예외 건만 송장번호로 구분)
+  const o=String(r.주문||"").trim(), b=String(r.묶음||"").trim();
+  return o? ("O:"+o+"|"+b) : ("S:"+String(r.송장||"").trim()+"|"+b);
+}
 const PK_KEY="rf_pick_v1", SYNC_KEY="rf_sync_url";
 // 기본 서버 주소(레디핏 구글 시트) — 모든 기기가 자동으로 이 서버에 연결됩니다.
 const DEFAULT_SYNC_URL="https://script.google.com/macros/s/AKfycbz37RMThShYEnBuyDZG8cz_bV8b1CY13Fj6H48-B9fgSYjq5FBr4QmuS6H8OupEecEJBQ/exec";
@@ -1108,17 +1112,7 @@ function mergeRows(a,b){
   (a||[]).forEach(put); (b||[]).forEach(put);
   const out=[];
   m.forEach((r,k)=>{ const t=delTombs[k]; if(t&&t>=(r.u||0)) return; out.push(r); });
-  // 2차: 주문번호+묶음주문번호가 같은 행은 하나로 (송장번호 교체시 옛 송장 행 제거)
-  const byO=new Map(); const rest=[];
-  out.forEach(r=>{ const o=String(r.주문||"").trim(); if(!o){ rest.push(r); return; }
-    const ok=o+"|"+String(r.묶음||"").trim();
-    const ex=byO.get(ok);
-    if(!ex){ byO.set(ok,r); return; }
-    const ru=r.u||0, eu=ex.u||0;
-    if(ru>eu) byO.set(ok,r);                 // 최신 행이 그대로 이김 (옛 상태를 섞지 않음)
-    else if(ru===eu) byO.set(ok,fuseTie(ex,r)); // 도장 없는 옛 데이터끼리만 필드 병합
-  });
-  return rest.concat([...byO.values()]);
+  return out;
 }
 function rowsSig(rows){ try{ return JSON.stringify((rows||[]).map(r=>[rkOf(r),r.u||0,r.picked?1:0,r.sent?1:0,r.msg||"",(r.memos||[]).length]).sort()); }catch(_){ return ""; } }
 let pushBusy=false;
@@ -1324,12 +1318,10 @@ function pickLoadAOA(aoa, label){
   }).filter(r=>/^\d{9,}$/.test(String(r.송장).trim()));
   if(!rows.length){alert("송장번호가 있는 행이 없습니다.");return;}
   if(!pkData) pkData={headers, idx, rows:[]};
-  const rkey=r=>rkOf(r); // 송장+주문번호+묶음주문번호로 구분
-  const okeyOf=r=>{ const o=String(r.주문||"").trim(); return o? o+"|"+String(r.묶음||"").trim() : null; };
+  const rkey=r=>rkOf(r); // 구분 열쇠: 주문번호+묶음주문번호
   const exmap=new Map(pkData.rows.map(r=>[rkey(r),r]));
-  const exByOkey=new Map(); pkData.rows.forEach(r=>{ const k=okeyOf(r); if(k) exByOkey.set(k,r); });
   // 중복 검사: 전부 기존과 완전히 동일(송장까지 같음)하면 차단
-  const dupN=rows.filter(nr=>exmap.has(rkey(nr))).length;
+  const dupN=rows.filter(nr=>{ const ex=exmap.get(rkey(nr)); return ex && onlyDigits(ex.송장||"")===onlyDigits(nr.송장||""); }).length;
   if(rows.length>0 && dupN===rows.length){
     alert(`⚠ 이미 업로드된 데이터입니다.\n${rows.length}건 전부 기존 목록에 있는 주문이라 추가하지 않았습니다.`);
     return;
@@ -1338,27 +1330,16 @@ function pickLoadAOA(aoa, label){
   rows.forEach(nr=>{
     nr.added=todayStr(); nr.memos=[];
     const ex=exmap.get(rkey(nr));
-    if(ex){ // 송장+주문 완전 동일 — 정보만 갱신
+    if(ex){ // 주문번호+묶음주문번호 동일 — 2중 등록 없이 기존 주문 갱신
+      const invChanged = onlyDigits(ex.송장||"")!==onlyDigits(nr.송장||"");
+      if(invChanged){ ex.송장=nr.송장; ex.picked=false; ex.pickedAt=""; } // 송장 교체시 새 송장으로 다시 스캔해야 완료
       ["주문일자","수취인","오픈마켓","상품","옵션","수량","묶음"].forEach(f=>{ if(nr[f]) ex[f]=nr[f]; });
       if(nr.msg&&!ex.msg) ex.msg=nr.msg;
       if(nr.extra&&Object.keys(nr.extra).length) ex.extra=nr.extra;
-      touch(ex); updN++; return;
-    }
-    const ok=okeyOf(nr); const exO=ok? exByOkey.get(ok) : null;
-    if(exO){ // 주문번호+묶음주문번호 동일 — 2중 등록 대신 기존 주문의 송장번호를 교체
-      exmap.delete(rkey(exO));
-      const invChanged = onlyDigits(exO.송장)!==onlyDigits(nr.송장);
-      if(invChanged) addTombKey(rkOf(exO)); // 옛 송장 이름표 삭제 처리
-      exO.송장=nr.송장;
-      if(invChanged){ exO.picked=false; exO.pickedAt=""; } // 송장이 바뀌면 새 송장으로 다시 스캔해야 완료
-      ["주문일자","수취인","오픈마켓","상품","옵션","수량","묶음"].forEach(f=>{ if(nr[f]) exO[f]=nr[f]; });
-      if(nr.msg&&!exO.msg) exO.msg=nr.msg;
-      if(nr.extra&&Object.keys(nr.extra).length) exO.extra=nr.extra;
-      touch(exO); delete delTombs[rkOf(exO)];
-      exmap.set(rkey(exO),exO); invN++; return;
+      touch(ex); if(invChanged) invN++; else updN++; return;
     }
     touch(nr); delete delTombs[rkOf(nr)];
-    pkData.rows.push(nr); exmap.set(rkey(nr),nr); if(ok) exByOkey.set(ok,nr); addedN++;
+    pkData.rows.push(nr); exmap.set(rkey(nr),nr); addedN++;
   });
   savePk();
   showPickPanel(`✓ ${label} — 신규 ${addedN}건${updN?`, 갱신 ${updN}건`:""}${invN?`, 송장번호 교체 ${invN}건`:""} (누적 ${pkData.rows.length}건)`);
