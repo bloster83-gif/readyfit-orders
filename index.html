@@ -359,7 +359,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v6.0</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v6.1</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -1094,6 +1094,7 @@ function fuseTie(x,y){
   if(!o.sent&&y.sent) o.sent=true;
   if(!(o.msg&&String(o.msg).trim())&&y.msg) o.msg=y.msg;
   const mm=new Map(); (y.memos||[]).concat(o.memos||[]).forEach(m0=>mm.set((m0.t||"")+"|"+(m0.text||""),m0)); o.memos=[...mm.values()];
+  if((!o.extra||!Object.keys(o.extra).length)&&y.extra) o.extra=y.extra;
   return o;
 }
 function mergeRows(a,b){
@@ -1310,11 +1311,17 @@ function pickLoadAOA(aoa, label){
   }
   const raw=body.filter(r=>r.some(c=>String(c).trim()!==""));
   const g=(r,k)=> idx[k]>=0?String(r[idx[k]]??"").trim():"";
-  const rows=raw.map(r=>({ cells:r.slice(),
-    주문일자:g(r,"주문일자"),
+  const rows=raw.map(r=>{
+    // 업로드 원본 전체 열 보관 (세부에서 확인)
+    const extra={};
+    (headers||[]).forEach((h,ci)=>{ const hv=String(h||"").trim(); if(!hv) return; const v=r[ci]; const sv=v==null?"":String(v).trim(); if(sv!=="") extra[hv]=sv; });
+    return { cells:r.slice(),
+    주문일자:g(r,"주문일자")||g(r,"결제일자"),
     송장:g(r,"송장번호"), 주문:g(r,"주문번호"), 묶음:g(r,"묶음주문번호"), 수취인:g(r,"수취인"), 오픈마켓:g(r,"오픈마켓명"),
     상품:g(r,"상품명"), 옵션:g(r,"옵션"), 수량:g(r,"수량"), msg:g(r,"물류메세지"),
-    picked:false, sent:false, pickedAt:"" })).filter(r=>/^\d{9,}$/.test(String(r.송장).trim()));
+    extra,
+    picked:false, sent:false, pickedAt:"" };
+  }).filter(r=>/^\d{9,}$/.test(String(r.송장).trim()));
   if(!rows.length){alert("송장번호가 있는 행이 없습니다.");return;}
   if(!pkData) pkData={headers, idx, rows:[]};
   const rkey=r=>String(r.송장)+"|"+String(r.주문);
@@ -1333,7 +1340,9 @@ function pickLoadAOA(aoa, label){
     const ex=exmap.get(rkey(nr));
     if(ex){ // 송장+주문 완전 동일 — 정보만 갱신
       ["주문일자","수취인","오픈마켓","상품","옵션","수량","묶음"].forEach(f=>{ if(nr[f]) ex[f]=nr[f]; });
-      if(nr.msg&&!ex.msg) ex.msg=nr.msg; touch(ex); updN++; return;
+      if(nr.msg&&!ex.msg) ex.msg=nr.msg;
+      if(nr.extra&&Object.keys(nr.extra).length) ex.extra=nr.extra;
+      touch(ex); updN++; return;
     }
     const ok=okeyOf(nr); const exO=ok? exByOkey.get(ok) : null;
     if(exO){ // 주문번호+묶음주문번호 동일 — 2중 등록 대신 기존 주문의 송장번호를 교체
@@ -1344,6 +1353,7 @@ function pickLoadAOA(aoa, label){
       if(invChanged){ exO.picked=false; exO.pickedAt=""; } // 송장이 바뀌면 새 송장으로 다시 스캔해야 완료
       ["주문일자","수취인","오픈마켓","상품","옵션","수량","묶음"].forEach(f=>{ if(nr[f]) exO[f]=nr[f]; });
       if(nr.msg&&!exO.msg) exO.msg=nr.msg;
+      if(nr.extra&&Object.keys(nr.extra).length) exO.extra=nr.extra;
       touch(exO); delete delTombs[rkOf(exO)];
       exmap.set(rkey(exO),exO); invN++; return;
     }
@@ -1518,8 +1528,14 @@ const EDIT_FIELDS=[["주문일자","주문일자"],["수취인","수취인"],["�
 function openEdit(i){
   if(!pkData||!pkData.rows[i]) return;
   editIdx=i; const r=pkData.rows[i];
-  document.getElementById("editFields").innerHTML=EDIT_FIELDS.map(([k,label])=>`
+  let efHtml=EDIT_FIELDS.map(([k,label])=>`
     <div class="maprow"><span class="tag">${label}</span><input data-ef="${k}" value="${String(r[k]??"").replace(/"/g,"&quot;")}"></div>`).join("");
+  const exd=r.extra||{}; const exKeys=Object.keys(exd);
+  if(exKeys.length){
+    efHtml+=`<div style="margin:14px 0 6px;font-weight:800;font-size:12px;color:var(--dim);border-top:1px solid var(--line);padding-top:10px">📄 업로드 원본 전체 정보 (${exKeys.length}개 항목)</div>`;
+    efHtml+=exKeys.map(k=>`<div class="maprow"><span class="tag">${k.replace(/</g,"&lt;")}</span><input value="${String(exd[k]).replace(/"/g,"&quot;")}" readonly style="opacity:.75" onclick="this.select()"></div>`).join("");
+  }
+  document.getElementById("editFields").innerHTML=efHtml;
   document.getElementById("editPickState").innerHTML = r.picked
     ? `현재 상태: <b style="color:var(--ok)">픽업검수 완료</b> (${r.pickedAt||""})`
     : `현재 상태: <b style="color:var(--warn)">픽업검수 대기</b>`;
