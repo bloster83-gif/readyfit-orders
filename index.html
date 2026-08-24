@@ -359,7 +359,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v6.3</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v6.4</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -758,7 +758,7 @@ function buildUnifiedRows(){
         const hS=st.headers.findIndex(h=>norm(h)==="납품배송비");
         if(hT>=0) rec["주문금액"]=String(num(row[hT])-(hS>=0?num(row[hS]):0));
       }
-      if(!rec["묶음주문번호"]) rec["묶음주문번호"]="1"; // 묶음주문번호 없으면 1 (필수값)
+      rec._noBnd = !rec["묶음주문번호"]; // 공란이면 뒤에서 주문번호별 1,2,3… 자동 부여
       // 주문일자·결제일자 → "YYYYMMDD 00:00:00" 형식 통일
       rec["주문일자"]=fmtDate(rec["주문일자"]);
       rec["결제일자"]=fmtDate(rec["결제일자"]);
@@ -785,6 +785,18 @@ function buildUnifiedRows(){
       out.push(rec);
     }
   }
+  // 묶음주문번호 공란 자동 부여 — 같은 주문번호 안에서 1,2,3…
+  // (전부 "1"로 넣으면 같은 주문의 여러 상품이 동일 주문으로 인식되어 합쳐짐)
+  const bSeq={};
+  out.forEach(r=>{
+    if(r._noBnd){
+      const k=r._site+"|"+String(r["주문번호"]||"");
+      bSeq[k]=(bSeq[k]||0)+1;
+      r["묶음주문번호"]=String(bSeq[k]);
+    }
+    delete r._noBnd;
+  });
+
   // K쇼핑: 동일 주문번호 중복 시 -1,-2… 접미사 (이카운트 중복 업로드 방지)
   const kCnt={}, kSeen={};
   out.forEach(r=>{ if(r._site==="kshop" && r["주문번호"]) kCnt[r["주문번호"]]=(kCnt[r["주문번호"]]||0)+1; });
@@ -1316,6 +1328,20 @@ function pickLoadAOA(aoa, label){
     extra,
     picked:false, sent:false, pickedAt:"" };
   }).filter(r=>/^\d{9,}$/.test(String(r.송장).trim()));
+  // 묶음주문번호 공란 보완 — 같은 주문번호가 여러 건인데 묶음번호가 비어 있으면 1,2,3… 자동 부여
+  // (안 하면 같은 주문번호끼리 동일 주문으로 인식되어 1건으로 합쳐짐)
+  (function(){
+    const cnt={};
+    rows.forEach(r=>{ const o=String(r.주문||"").trim(); if(o && !String(r.묶음||"").trim()) cnt[o]=(cnt[o]||0)+1; });
+    const dup=Object.keys(cnt).filter(o=>cnt[o]>1);
+    if(!dup.length) return;
+    const sortKey=r=>[String(r.상품||""),String(r.옵션||""),String(r.수량||""),String(r.송장||"")].join("\u0001");
+    dup.forEach(o=>{
+      const grp=rows.filter(r=>String(r.주문||"").trim()===o && !String(r.묶음||"").trim());
+      grp.slice().sort((a,b)=> sortKey(a)<sortKey(b)?-1: sortKey(a)>sortKey(b)?1:0)
+         .forEach((r,i)=>{ r.묶음=String(i+1); });
+    });
+  })();
   if(!rows.length){alert("송장번호가 있는 행이 없습니다.");return;}
   if(!pkData) pkData={headers, idx, rows:[]};
   const rkey=r=>rkOf(r); // 구분 열쇠: 주문번호+묶음주문번호
