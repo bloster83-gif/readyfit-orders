@@ -359,7 +359,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v6.5</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v6.6</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -1157,7 +1157,7 @@ function pushServer(){
       try{
         const res=await fetch(syncUrl+(syncUrl.includes("?")?"&":"?")+"action=load");
         const j=await res.json();
-        if(j&&Array.isArray(j.rows)){
+        if(j&&Array.isArray(j.rows) && !pendingScan){
           const before=rowsSig(pkData.rows);
           pkData.rows=mergeRows(pkData.rows, j.rows);
           savePkLocalOnly();
@@ -1711,23 +1711,42 @@ function speak(txt){
   }catch(_){}
 }
 let pendingScan=null;
+/* 확인 대기 중인 스캔은 주문 '열쇠'로 기억한다.
+   객체 참조로 들고 있으면 대기 중 자동 동기화가 목록을 새로 만들 때
+   참조가 끊겨서 픽업검수가 저장되지 않는다(스캔기록엔 ✓, 목록은 대기). */
+function findScanRows(val, keys){
+  if(!pkData) return [];
+  const ks=new Set(keys||[]);
+  let rows=ks.size? pkData.rows.filter(r=>ks.has(rkOf(r))) : [];
+  if(!rows.length){
+    const dv=onlyDigits(val);
+    rows=pkData.rows.filter(r=> r.송장 && (r.송장===val || (dv&&onlyDigits(r.송장)===dv)));
+  }
+  return rows;
+}
 function resolvePending(ok){
   if(!pendingScan) return;
-  const {hits,val}=pendingScan; pendingScan=null;
+  const {keys,val,name,inv}=pendingScan; pendingScan=null;
   document.getElementById("scanConfirm").style.display="none";
   document.getElementById("scanResult").classList.remove("pend");
   const t=nowStr();
-  const nm=(hits[0].수취인||"").replace(/\(.*?\)/g,"").trim();
+  const rows=findScanRows(val,keys);          // 저장 직전에 현재 목록에서 다시 찾음
+  const nm=(name||"").replace(/\(.*?\)/g,"").trim();
   if(ok){
-    hits.forEach(r=>{ setPick(r,true,t); }); savePk();
-    scanResult(true, hits[0]);
-    scanLog.unshift({d:todayStr(), t:t.slice(11), ok:true, text:`${hits[0].수취인||''} · ${val}`, inv:hits[0].송장}); saveScanLog();
+    if(!rows.length){                          // 그 사이 주문이 삭제·변경된 경우
+      scanResult(false,null,`처리할 주문을 찾지 못했습니다: ${val}\n다시 스캔해주세요.`);
+      scanLog.unshift({d:todayStr(), t:t.slice(11), ok:false, text:`실패(주문없음) · ${val}`}); saveScanLog();
+      renderScanUI(); speak("다시 스캔해주세요"); return;
+    }
+    rows.forEach(r=>{ setPick(r,true,t); }); savePk();
+    scanResult(true, rows[0]);
+    scanLog.unshift({d:todayStr(), t:t.slice(11), ok:true, text:`${rows[0].수취인||name||''} · ${val}`, inv:rows[0].송장||inv}); saveScanLog();
     renderPick(); renderScanUI();
     speak(nm+" 픽업완료");
   }else{
-    scanLog.unshift({d:todayStr(), t:t.slice(11), ok:false, text:`보류(물류메세지) · ${hits[0].수취인||''} · ${val}`}); saveScanLog();
+    scanLog.unshift({d:todayStr(), t:t.slice(11), ok:false, text:`보류(물류메세지) · ${name||''} · ${val}`}); saveScanLog();
     renderScanUI();
-    document.getElementById("scanMeta").innerHTML=`송장 ${hits[0].송장} · 주문 ${hits[0].주문||'-'} <br><b style="color:var(--err)">픽업검수 보류됨 (미완료)</b>`;
+    document.getElementById("scanMeta").innerHTML=`송장 ${inv||val} · <b style="color:var(--err)">픽업검수 보류됨 (미완료)</b>`;
     speak("검수 보류");
   }
   const si=document.getElementById("scanInput"); if(si) si.focus();
@@ -1741,7 +1760,7 @@ function doScan(v){
   const t=nowStr();
   if(hits.length && hits[0].msg && String(hits[0].msg).trim() && !hits[0].picked){
     // 물류메세지가 있는 주문: 바로 픽업완료하지 않고 메세지 확인 후 선택
-    pendingScan={hits, val};
+    pendingScan={keys:hits.map(rkOf), val, name:hits[0].수취인||"", inv:hits[0].송장||""};
     scanResult(true, hits[0], null, true);
     const nm=(hits[0].수취인||"").replace(/\(.*?\)/g,"").trim();
     speak(nm+". 물류 메세지 확인. "+String(hits[0].msg).trim()+". 픽업검수 여부를 선택하세요");
