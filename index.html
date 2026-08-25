@@ -359,7 +359,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v6.7</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v6.8</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -1084,7 +1084,14 @@ function saveScanLog(){ try{ localStorage.setItem(SCANLOG_KEY, JSON.stringify(sc
 let selKeys=new Set(); let pkView=[]; // 체크 선택(재렌더링에도 유지), 현재 화면에 표시된 행 인덱스
 /* 진짜 주문번호인지 판별 — "교환건", "도매몰" 처럼 사람이 적어 넣은 라벨은
    여러 주문이 같은 값을 쓰므로 주문번호로 취급하면 서로 같은 주문으로 뭉쳐진다. */
-function isOrderId(o){ o=String(o||"").trim(); return o.length>=6 && /^[A-Za-z0-9_.-]+$/.test(o); }
+function isOrderId(o){
+  o=String(o||"").trim();
+  if(!o) return false;
+  if(!/^[A-Za-z0-9_.\-]+$/.test(o)) return false;  // 한글·공백·기호가 섞이면 수기 라벨 (예: 교환건, 도매몰, 교환 건)
+  if(!/[0-9]/.test(o)) return false;               // 숫자가 하나도 없으면 라벨 (예: ABC)
+  if(o.length<4) return false;                     // 너무 짧으면 라벨
+  return true;
+}
 function rkOf(r){
   // 구분 열쇠: 주문번호+묶음주문번호 (주문번호가 없거나 수기 라벨이면 송장번호로 구분)
   const o=String(r.주문||"").trim(), b=String(r.묶음||"").trim();
