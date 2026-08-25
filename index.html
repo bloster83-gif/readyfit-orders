@@ -359,7 +359,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v6.6</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v6.7</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -1082,10 +1082,13 @@ const SCANLOG_KEY="rf_scanlog_v1";
 let scanLog=[]; try{ scanLog=JSON.parse(localStorage.getItem(SCANLOG_KEY)||"[]")||[]; }catch(_){ scanLog=[]; }
 function saveScanLog(){ try{ localStorage.setItem(SCANLOG_KEY, JSON.stringify(scanLog.slice(0,500))); }catch(_){} }
 let selKeys=new Set(); let pkView=[]; // 체크 선택(재렌더링에도 유지), 현재 화면에 표시된 행 인덱스
+/* 진짜 주문번호인지 판별 — "교환건", "도매몰" 처럼 사람이 적어 넣은 라벨은
+   여러 주문이 같은 값을 쓰므로 주문번호로 취급하면 서로 같은 주문으로 뭉쳐진다. */
+function isOrderId(o){ o=String(o||"").trim(); return o.length>=6 && /^[A-Za-z0-9_.-]+$/.test(o); }
 function rkOf(r){
-  // 구분 열쇠: 주문번호+묶음주문번호 (주문번호가 없는 예외 건만 송장번호로 구분)
+  // 구분 열쇠: 주문번호+묶음주문번호 (주문번호가 없거나 수기 라벨이면 송장번호로 구분)
   const o=String(r.주문||"").trim(), b=String(r.묶음||"").trim();
-  return o? ("O:"+o+"|"+b) : ("S:"+String(r.송장||"").trim()+"|"+b);
+  return isOrderId(o) ? ("O:"+o+"|"+b) : ("S:"+String(r.송장||"").trim()+"|"+b);
 }
 const PK_KEY="rf_pick_v1", SYNC_KEY="rf_sync_url";
 // 기본 서버 주소(레디핏 구글 시트) — 모든 기기가 자동으로 이 서버에 연결됩니다.
@@ -1350,12 +1353,12 @@ function pickLoadAOA(aoa, label){
   // (안 하면 같은 주문번호끼리 동일 주문으로 인식되어 1건으로 합쳐짐)
   (function(){
     const cnt={};
-    rows.forEach(r=>{ const o=String(r.주문||"").trim(); if(o && !String(r.묶음||"").trim()) cnt[o]=(cnt[o]||0)+1; });
+    rows.forEach(r=>{ const o=String(r.주문||"").trim(); if(isOrderId(o) && !String(r.묶음||"").trim()) cnt[o]=(cnt[o]||0)+1; });
     const dup=Object.keys(cnt).filter(o=>cnt[o]>1);
     if(!dup.length) return;
     const sortKey=r=>[String(r.상품||""),String(r.옵션||""),String(r.수량||""),String(r.송장||"")].join("\u0001");
     dup.forEach(o=>{
-      const grp=rows.filter(r=>String(r.주문||"").trim()===o && !String(r.묶음||"").trim());
+      const grp=rows.filter(r=>isOrderId(String(r.주문||"").trim()) && String(r.주문||"").trim()===o && !String(r.묶음||"").trim());
       grp.slice().sort((a,b)=> sortKey(a)<sortKey(b)?-1: sortKey(a)>sortKey(b)?1:0)
          .forEach((r,i)=>{ r.묶음=String(i+1); });
     });
