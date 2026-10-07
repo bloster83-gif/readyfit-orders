@@ -419,6 +419,8 @@ global.decryptXlsCFB=decryptXlsCFB;
       <input id="pickSearch" type="text" placeholder="🔍 수취인 · 송장 · 주문번호 · 날짜(0729) 검색" style="flex:1;min-width:200px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13px">
       <span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)">📅 <input type="date" id="pickFrom" class="datein"> ~ <input type="date" id="pickTo" class="datein"></span>
       <button class="fbtn" data-pf="unsent">미송신만</button>
+      <button class="fbtn" id="orderSiteBtn" aria-expanded="false" aria-controls="pickSite">주문사이트</button>
+      <select id="pickSite" class="fbtn" aria-label="주문사이트 선택" style="display:none;max-width:260px"><option value="">전체 사이트</option></select>
       <button class="fbtn" data-pf="picked">픽업검수만</button>
       <button class="fbtn" data-pf="memo">메모만</button>
       <button class="fbtn" data-pf="msg">물류메세지만</button>
@@ -1436,9 +1438,25 @@ function pickStat(){
   const st=document.getElementById("scanTotal"), sp=document.getElementById("scanPicked");
   if(st) st.textContent=pkData.rows.length; if(sp) sp.textContent=picked;
 }
+function refreshOrderSites(){
+  const select=document.getElementById("pickSite");
+  const selected=select.value;
+  const names=[...new Set((pkData?pkData.rows:[]).map(r=>String(r.오픈마켓||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ko"));
+  const values=["",...names];
+  if(values.length!==select.options.length || values.some((v,i)=>select.options[i].value!==v)){
+    select.replaceChildren(...values.map(name=>{
+      const option=document.createElement("option");
+      option.value=name; option.textContent=name||"전체 사이트";
+      return option;
+    }));
+    select.value=names.includes(selected)?selected:"";
+  }
+}
 function renderPick(){
+  refreshOrderSites();
+  const site=document.getElementById("pickSite").value;
   const area=document.getElementById("pickArea");
-  if(!pkData||!pkData.rows.length){area.innerHTML=`<div class="empty">아직 주문이 없습니다. 왼쪽 위 [＋ 주문 업로드]로 송장 파일을 올려주세요.</div>`;return;}
+  if(!pkData||!pkData.rows.length){pkView=[];area.innerHTML=`<div class="empty">아직 주문이 없습니다. 왼쪽 위 [＋ 주문 업로드]로 송장 파일을 올려주세요.</div>`;return;}
   const q=norm(document.getElementById("pickSearch").value||""); const qd=onlyDigits(q);
   const cut=(()=>{const d=new Date();d.setDate(d.getDate()-6);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");})();
   const pf=pkFilters;
@@ -1446,6 +1464,7 @@ function renderPick(){
   const n2=onlyDigits((document.getElementById("pickTo")||{}).value||"").slice(0,8);
   const hasRange=!!(n1||n2);
   const rows=pkData.rows.map((r,i)=>({r,i})).filter(({r})=>{
+    if(site && String(r.오픈마켓||"").trim()!==site) return false;
     if(pf.has("unsent") && r.sent) return false;
     if(pf.has("picked") && !r.picked) return false;
     if(pf.has("memo") && !(r.memos&&r.memos.length)) return false;
@@ -1456,7 +1475,7 @@ function renderPick(){
       if(!ok(a)&&!ok(o)) return false;
     }
     if(q) return norm(r.수취인).includes(q)||(qd&&onlyDigits(r.송장).includes(qd))||norm(r.주문).includes(q)||(qd&&qd.length>=3&&(onlyDigits(r.added||"").includes(qd)||onlyDigits(r.주문일자||"").includes(qd)));
-    if(pf.size||hasRange) return true;
+    if(pf.size||hasRange||site) return true;
     // 최근 7일: 주문일자 기준 (없으면 업로드일자)
     const d7=onlyDigits(r.주문일자||r.added||"").slice(0,8);
     return d7 ? d7>=onlyDigits(cut) : true;
@@ -1481,7 +1500,8 @@ function renderPick(){
   const PF_NAMES={unsent:"미송신",picked:"픽업검수 완료",memo:"메모 있음",msg:"물류메세지 있음"};
   const pfName=[...pf].map(k=>PF_NAMES[k]).join("+");
   const scopeTxt = hasRange?`(날짜 ${n1||'처음'}~${n2||'끝'}${pfName?' · '+pfName+'만':''}${q?' · 검색':''})` : q?"(전체 기간 검색결과)" : pf.size?`(전체 기간 · ${pfName}만)` : "(최근 7일 — 이전 주문은 검색으로 조회)";
-  h+=`</tbody></table></div><div class="rowcount">${rows.length}건 표시 · 누적 ${pkData.rows.length}건 ${scopeTxt}</div>`;
+  const siteScope=site?` · 주문사이트: ${site.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}`:"";
+  h+=`</tbody></table></div><div class="rowcount">${rows.length}건 표시 · 누적 ${pkData.rows.length}건 ${site && !hasRange && !q && !pf.size ? "(전체 기간)" : scopeTxt}${siteScope}</div>`;
   area.innerHTML=h;
   area.querySelectorAll("[data-msg]").forEach(inp=>inp.addEventListener("input",e=>{const r0=pkData.rows[+e.target.dataset.msg];setMsg(r0,e.target.value);savePk();}));
   area.querySelectorAll("[data-sent]").forEach(c=>c.addEventListener("change",e=>{const r0=pkData.rows[+e.target.dataset.sent];setSent(r0,e.target.checked);savePk();pickStat();renderPick();}));
@@ -1499,6 +1519,15 @@ function renderPick(){
   }); });
   pkView=rows.map(x=>x.i);
 }
+document.getElementById("orderSiteBtn").addEventListener("click",()=>{
+  const select=document.getElementById("pickSite"), button=document.getElementById("orderSiteBtn");
+  const open=select.style.display==="none";
+  select.style.display=open?"":"none";
+  button.classList.toggle("on",open); button.setAttribute("aria-expanded",String(open));
+  if(open){refreshOrderSites();select.focus();}
+  else{select.value="";renderPick();}
+});
+document.getElementById("pickSite").addEventListener("change",renderPick);
 document.getElementById("pickSearch").addEventListener("input",renderPick);
 document.getElementById("pickFrom").addEventListener("change",renderPick);
 document.getElementById("pickTo").addEventListener("change",renderPick);
@@ -1511,6 +1540,8 @@ document.getElementById("searchToggleBtn").addEventListener("click",()=>{
   else{ // 닫으면 검색조건 초기화
     document.getElementById("pickSearch").value="";
     document.getElementById("pickFrom").value=""; document.getElementById("pickTo").value="";
+    document.getElementById("pickSite").value=""; document.getElementById("pickSite").style.display="none";
+    document.getElementById("orderSiteBtn").classList.remove("on"); document.getElementById("orderSiteBtn").setAttribute("aria-expanded","false");
     pkFilters.clear(); document.querySelectorAll(".fbtn[data-pf]").forEach(x=>x.classList.remove("on"));
     renderPick();
   }
