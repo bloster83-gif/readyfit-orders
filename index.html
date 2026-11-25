@@ -359,7 +359,7 @@ global.decryptXlsCFB=decryptXlsCFB;
 </div>
 <header>
   <div>
-    <h1>레디핏 주문 도구 <span class="badge">v6.9</span></h1>
+    <h1>레디핏 주문 도구 <span class="badge">v6.9.1</span></h1>
     <div class="sub" id="headSub">수기취합 사이트 주문 엑셀 → 한 파일로 자동 취합 → 이카운트 &quot;웹자료올리기&quot; 업로드</div>
   </div>
   <div class="seg">
@@ -767,6 +767,11 @@ function buildUnifiedRows(){
       UNIFIED.forEach(u=>{ const i=st.mapping[u]; rec[u]= i>=0? String(row[i]??"").trim() : ""; });
       rec["쇼핑몰명"]=mallName;
       rec["쇼핑몰코드"]=(MALL[s.id]&&MALL[s.id].mall)||"";
+      // 비즈마켓은 상품코드가 옵션 간에 같으므로 옵션 전체를 품목키에 포함한다.
+      // 원본을 수정하지 않고 매번 생성하므로 미리보기·복사·다운로드에 동일하게 적용된다.
+      if(s.id==="interpark" && rec["쇼핑몰상품코드"] && rec["옵션"]){
+        rec["쇼핑몰상품코드"] += "/" + rec["옵션"].replace(/\s+/g," ").trim();
+      }
       if(s.id==="kshop") rec["배송비금액"]="0"; // K쇼핑 배송비금액 0원
       // 오너클랜: 판매가가 배송비 포함 → 주문금액 = 합계 − 납품배송비
       if(s.id==="ownerclan"){
@@ -875,7 +880,7 @@ function renderDrop(){
     el.innerHTML=`
       <div class="drop ${st?'has':''}" data-site="${s.id}">
         <div class="site">${s.label}</div>
-        <div class="hint">엑셀(.xlsx/.xls)을 끌어놓거나 클릭</div>
+        <div class="hint">엑셀(.xlsx/.xls)을 끌어놓거나 클릭${s.id==='interpark'?'<br>품목키는 상품코드/옵션 전체로 자동 구분됩니다.':''}</div>
         ${st?`<div class="filechip">✓ ${st.fileName}<span class="x" data-x="${s.id}">✕</span></div>
              <div class="rowcount">${st.rows.length}건 · 헤더 ${st.headers.filter(Boolean).length}열 인식</div>`:''}
       </div>
